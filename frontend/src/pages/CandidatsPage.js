@@ -46,6 +46,7 @@ const initialFormState = {
   nom: '',
   prenom: '',
   ville: '',
+  code_postal: '',
   rayon_km: 30,
   titre_poste: '',
   remuneration: '',
@@ -107,6 +108,7 @@ export default function CandidatsPage() {
       nom: candidat.nom,
       prenom: candidat.prenom,
       ville: candidat.ville,
+      code_postal: candidat.code_postal || '',
       rayon_km: candidat.rayon_km,
       titre_poste: candidat.titre_poste,
       remuneration: candidat.remuneration || '',
@@ -478,7 +480,7 @@ export default function CandidatsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="ville">Ville</Label>
                   <Input
@@ -488,6 +490,16 @@ export default function CandidatsPage() {
                     placeholder="Ex: Bordeaux"
                     required
                     data-testid="candidat-ville-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="code_postal">Code postal</Label>
+                  <Input
+                    id="code_postal"
+                    value={formData.code_postal}
+                    onChange={(e) => setFormData({ ...formData, code_postal: e.target.value })}
+                    placeholder="Ex: 33000"
+                    data-testid="candidat-cp-input"
                   />
                 </div>
                 <div className="space-y-2">
