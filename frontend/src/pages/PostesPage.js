@@ -22,7 +22,7 @@ import {
 } from '../components/ui/dropdown-menu';
 import { Switch } from '../components/ui/switch';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -183,6 +183,42 @@ export default function PostesPage() {
     }
   };
 
+  const handleImport = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${API_URL}/api/import/postes`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        toast.success(`${result.imported} poste(s) importé(s) !`);
+        if (result.errors?.length > 0) {
+          toast.warning(`${result.errors.length} erreur(s) lors de l'import`);
+        }
+        fetchPostes();
+      } else {
+        toast.error(result.detail || 'Erreur lors de l\'import');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error('Erreur lors de l\'import');
+    }
+    
+    // Reset input
+    event.target.value = '';
+  };
+
   if (loading) {
     return (
       <div className="p-6 lg:p-8 flex items-center justify-center min-h-[60vh]">
@@ -208,11 +244,26 @@ export default function PostesPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExport} data-testid="export-postes-btn">
             <Download className="h-4 w-4 mr-2" />
-            Export Excel
+            Export
           </Button>
+          <label className="cursor-pointer">
+            <Button variant="outline" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Import Excel
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              className="hidden"
+              data-testid="import-postes-input"
+            />
+          </label>
           <Button onClick={openCreateModal} data-testid="add-poste-btn">
             <Plus className="h-4 w-4 mr-2" />
-            Ajouter un poste
+            Ajouter
           </Button>
         </div>
       </div>
