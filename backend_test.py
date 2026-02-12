@@ -417,7 +417,7 @@ def main():
         tester.test_candidats_crud()
         tester.test_postes_crud()
         tester.test_matching()
-        tester.test_stats()
+        tester.test_stats_and_sources()
         tester.test_error_handling()
         
         # Cleanup
