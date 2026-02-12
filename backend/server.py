@@ -80,6 +80,7 @@ class CandidatCreate(BaseModel):
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
     source: Optional[str] = None
+    is_archived: bool = False
 
 class CandidatUpdate(BaseModel):
     nom: Optional[str] = None
@@ -91,6 +92,7 @@ class CandidatUpdate(BaseModel):
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
     source: Optional[str] = None
+    is_archived: Optional[bool] = None
 
 class Candidat(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -104,6 +106,7 @@ class Candidat(BaseModel):
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
     source: Optional[str] = None
+    is_archived: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Process Models (suivi candidat-poste)
