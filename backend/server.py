@@ -129,12 +129,16 @@ class PosteCreate(BaseModel):
     titre_poste: str
     ville: str
     convention_signee: bool = False
+    contact: Optional[str] = None
+    email_contact: Optional[str] = None
 
 class PosteUpdate(BaseModel):
     entreprise: Optional[str] = None
     titre_poste: Optional[str] = None
     ville: Optional[str] = None
     convention_signee: Optional[bool] = None
+    contact: Optional[str] = None
+    email_contact: Optional[str] = None
 
 class Poste(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -143,6 +147,8 @@ class Poste(BaseModel):
     titre_poste: str
     ville: str
     convention_signee: bool = False
+    contact: Optional[str] = None
+    email_contact: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Match Model
