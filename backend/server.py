@@ -52,6 +52,17 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
+# Statuts possibles pour un candidat
+STATUTS_CANDIDAT = ["NOUVEAU", "ENCV", "ENTC", "PROPALE", "PCLT", "REFUS", "NOGO_DISPO"]
+SOURCES_CANDIDAT = [
+    "Hellowork candidature",
+    "Hellowork cvtech", 
+    "Indeed",
+    "LinkedIn",
+    "Site 111 conseils",
+    "Cooptation"
+]
+
 # Candidat Models
 class CandidatCreate(BaseModel):
     nom: str
@@ -61,6 +72,9 @@ class CandidatCreate(BaseModel):
     titre_poste: str
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
+    statut: str = "NOUVEAU"
+    honoraire: Optional[float] = None
+    source: Optional[str] = None
 
 class CandidatUpdate(BaseModel):
     nom: Optional[str] = None
@@ -70,6 +84,9 @@ class CandidatUpdate(BaseModel):
     titre_poste: Optional[str] = None
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
+    statut: Optional[str] = None
+    honoraire: Optional[float] = None
+    source: Optional[str] = None
 
 class Candidat(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -81,6 +98,9 @@ class Candidat(BaseModel):
     titre_poste: str
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
+    statut: str = "NOUVEAU"
+    honoraire: Optional[float] = None
+    source: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Poste Models
@@ -489,11 +509,76 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             if match_result['score'] >= 70:
                 high_score_matches += 1
     
+    # Stats par statut
+    statuts_count = {}
+    total_honoraires = 0
+    for candidat in candidats:
+        statut = candidat.get('statut', 'NOUVEAU')
+        statuts_count[statut] = statuts_count.get(statut, 0) + 1
+        if statut == 'PCLT' and candidat.get('honoraire'):
+            total_honoraires += candidat['honoraire']
+    
     return {
         "total_candidats": total_candidats,
         "total_postes": total_postes,
         "total_matches": total_matches,
-        "high_score_matches": high_score_matches
+        "high_score_matches": high_score_matches,
+        "statuts_count": statuts_count,
+        "total_honoraires": total_honoraires,
+        "candidats_places": statuts_count.get('PCLT', 0)
+    }
+
+@api_router.get("/stats/sources")
+async def get_sources_stats(current_user: dict = Depends(get_current_user)):
+    """Statistiques par source de candidat"""
+    candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
+    
+    sources_stats = {}
+    for source in SOURCES_CANDIDAT:
+        sources_stats[source] = {
+            "total": 0,
+            "places": 0,
+            "honoraires": 0
+        }
+    
+    # Ajouter une catégorie "Non renseigné"
+    sources_stats["Non renseigné"] = {"total": 0, "places": 0, "honoraires": 0}
+    
+    for candidat in candidats:
+        source = candidat.get('source') or "Non renseigné"
+        if source not in sources_stats:
+            source = "Non renseigné"
+        
+        sources_stats[source]["total"] += 1
+        if candidat.get('statut') == 'PCLT':
+            sources_stats[source]["places"] += 1
+            if candidat.get('honoraire'):
+                sources_stats[source]["honoraires"] += candidat['honoraire']
+    
+    # Convertir en liste triée par honoraires
+    result = [
+        {"source": source, **stats}
+        for source, stats in sources_stats.items()
+        if stats["total"] > 0
+    ]
+    result.sort(key=lambda x: x["honoraires"], reverse=True)
+    
+    return result
+
+@api_router.get("/config/statuts")
+async def get_statuts():
+    """Retourne la liste des statuts disponibles"""
+    return {
+        "statuts": [
+            {"code": "NOUVEAU", "label": "Nouveau", "color": "gray"},
+            {"code": "ENCV", "label": "Envoyé au client", "color": "blue"},
+            {"code": "ENTC", "label": "Entretien client", "color": "purple"},
+            {"code": "PROPALE", "label": "Sous proposition", "color": "orange"},
+            {"code": "PCLT", "label": "Placé", "color": "green"},
+            {"code": "REFUS", "label": "Refus propale", "color": "red"},
+            {"code": "NOGO_DISPO", "label": "Plus disponible", "color": "gray"}
+        ],
+        "sources": SOURCES_CANDIDAT
     }
 
 # Include router
