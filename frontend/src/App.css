@@ -40,11 +40,11 @@
 }
 
 .score-badge.high {
-    @apply match-score-high;
+    @apply bg-green-500 text-white;
 }
 
 .score-badge.medium {
-    @apply match-score-medium;
+    @apply bg-orange-500 text-white;
 }
 
 .score-badge.low {
