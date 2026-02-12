@@ -1111,6 +1111,9 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                     val = str(row[col_map.get('convention_signee')]).lower().strip()
                     convention_signee = val in ('oui', 'yes', 'true', '1', 'signée', 'signee')
                 
+                contact = str(row[col_map.get('contact')] or '').strip() if col_map.get('contact') is not None else ''
+                email_contact = str(row[col_map.get('email_contact')] or '').strip() if col_map.get('email_contact') is not None else ''
+                
                 # Créer le poste
                 poste_doc = {
                     "id": str(uuid.uuid4()),
@@ -1118,6 +1121,8 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                     "titre_poste": titre_poste or "Non renseigné",
                     "ville": ville or "Non renseigné",
                     "convention_signee": convention_signee,
+                    "contact": contact or None,
+                    "email_contact": email_contact or None,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 
