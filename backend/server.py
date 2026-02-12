@@ -172,6 +172,25 @@ class Match(BaseModel):
     titre_match: bool
     zone_match: bool
 
+# Match depuis candidat vers poste
+class MatchFromCandidat(BaseModel):
+    poste: dict
+    score: int
+    titre_match: bool
+    zone_match: bool
+
+# Rejected Match Model (pour le système Tinder)
+class RejectedMatchCreate(BaseModel):
+    candidat_id: str
+    poste_id: str
+
+class RejectedMatch(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    candidat_id: str
+    poste_id: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # ============ FRENCH CITIES COORDINATES ============
 
 FRENCH_CITIES = {
