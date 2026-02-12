@@ -320,7 +320,7 @@ class RecruitHubAPITester:
             "Access without authentication",
             "GET",
             "candidats",
-            401,
+            403,
             require_auth=True
         )
         self.token = temp_token
