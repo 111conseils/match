@@ -28,20 +28,10 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, Euro } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-
-const STATUTS = [
-  { code: "NOUVEAU", label: "Nouveau", color: "bg-gray-100 text-gray-700" },
-  { code: "ENCV", label: "Envoyé au client", color: "bg-blue-100 text-blue-700" },
-  { code: "ENTC", label: "Entretien client", color: "bg-purple-100 text-purple-700" },
-  { code: "PROPALE", label: "Sous proposition", color: "bg-orange-100 text-orange-700" },
-  { code: "PCLT", label: "Placé", color: "bg-green-100 text-green-700" },
-  { code: "REFUS", label: "Refus propale", color: "bg-red-100 text-red-700" },
-  { code: "NOGO_DISPO", label: "Plus disponible", color: "bg-gray-200 text-gray-600" }
-];
 
 const SOURCES = [
   "Hellowork candidature",
@@ -60,39 +50,49 @@ const initialFormState = {
   titre_poste: '',
   remuneration: '',
   disponibilite: '',
-  statut: 'NOUVEAU',
-  honoraire: '',
   source: ''
 };
 
 export default function CandidatsPage() {
   const { getAuthHeaders } = useAuth();
   const [candidats, setCandidats] = useState([]);
+  const [processMap, setProcessMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatut, setFilterStatut] = useState('ALL');
+  const [filterSource, setFilterSource] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCandidat, setCurrentCandidat] = useState(null);
   const [formData, setFormData] = useState(initialFormState);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchCandidats = async () => {
+  const fetchData = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/candidats`, { 
-        headers: getAuthHeaders() 
+      const [candidatsRes, processRes] = await Promise.all([
+        axios.get(`${API_URL}/api/candidats`, { headers: getAuthHeaders() }),
+        axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() })
+      ]);
+      setCandidats(candidatsRes.data);
+      
+      // Créer une map des process par candidat_id
+      const pMap = {};
+      processRes.data.forEach(p => {
+        if (!pMap[p.candidat_id]) {
+          pMap[p.candidat_id] = [];
+        }
+        pMap[p.candidat_id].push(p);
       });
-      setCandidats(response.data);
+      setProcessMap(pMap);
     } catch (error) {
-      console.error('Error fetching candidats:', error);
-      toast.error('Erreur lors du chargement des candidats');
+      console.error('Error fetching data:', error);
+      toast.error('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCandidats();
+    fetchData();
   }, []);
 
   const openCreateModal = () => {
@@ -111,8 +111,6 @@ export default function CandidatsPage() {
       titre_poste: candidat.titre_poste,
       remuneration: candidat.remuneration || '',
       disponibilite: candidat.disponibilite || '',
-      statut: candidat.statut || 'NOUVEAU',
-      honoraire: candidat.honoraire || '',
       source: candidat.source || ''
     });
     setIsEditing(true);
@@ -126,7 +124,6 @@ export default function CandidatsPage() {
 
     const dataToSend = {
       ...formData,
-      honoraire: formData.honoraire ? parseFloat(formData.honoraire) : null,
       source: formData.source || null
     };
 
@@ -147,7 +144,7 @@ export default function CandidatsPage() {
         toast.success('Candidat ajouté');
       }
       setIsModalOpen(false);
-      fetchCandidats();
+      fetchData();
     } catch (error) {
       console.error('Error saving candidat:', error);
       toast.error('Erreur lors de l\'enregistrement');
@@ -157,38 +154,24 @@ export default function CandidatsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Supprimer ce candidat ?')) return;
+    if (!window.confirm('Supprimer ce candidat et tous ses process ?')) return;
     
     try {
-      await axios.delete(`${API_URL}/api/candidats/${id}`, { 
-        headers: getAuthHeaders() 
-      });
+      await axios.delete(`${API_URL}/api/candidats/${id}`, { headers: getAuthHeaders() });
       toast.success('Candidat supprimé');
-      fetchCandidats();
+      fetchData();
     } catch (error) {
       console.error('Error deleting candidat:', error);
       toast.error('Erreur lors de la suppression');
     }
   };
 
-  const updateStatut = async (candidat, newStatut) => {
-    try {
-      await axios.put(
-        `${API_URL}/api/candidats/${candidat.id}`,
-        { statut: newStatut },
-        { headers: getAuthHeaders() }
-      );
-      toast.success('Statut mis à jour');
-      fetchCandidats();
-    } catch (error) {
-      console.error('Error updating statut:', error);
-      toast.error('Erreur lors de la mise à jour');
-    }
+  const getProcessCount = (candidatId) => {
+    return processMap[candidatId]?.length || 0;
   };
 
-  const getStatutBadge = (statut) => {
-    const s = STATUTS.find(st => st.code === statut) || STATUTS[0];
-    return s;
+  const getActiveProcesses = (candidatId) => {
+    return processMap[candidatId]?.filter(p => !['PCLT', 'REFUS', 'NOGO_DISPO'].includes(p.statut)) || [];
   };
 
   const filteredCandidats = candidats.filter(c => {
@@ -200,8 +183,8 @@ export default function CandidatsPage() {
       c.titre_poste.toLowerCase().includes(query) ||
       (c.source && c.source.toLowerCase().includes(query))
     );
-    const matchesStatut = filterStatut === 'ALL' || c.statut === filterStatut;
-    return matchesSearch && matchesStatut;
+    const matchesSource = filterSource === 'ALL' || c.source === filterSource;
+    return matchesSearch && matchesSource;
   });
 
   if (loading) {
@@ -244,14 +227,14 @@ export default function CandidatsPage() {
                 data-testid="search-candidats-input"
               />
             </div>
-            <Select value={filterStatut} onValueChange={setFilterStatut}>
-              <SelectTrigger className="w-full sm:w-[200px]" data-testid="filter-statut">
-                <SelectValue placeholder="Filtrer par statut" />
+            <Select value={filterSource} onValueChange={setFilterSource}>
+              <SelectTrigger className="w-full sm:w-[200px]" data-testid="filter-source">
+                <SelectValue placeholder="Filtrer par source" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">Tous les statuts</SelectItem>
-                {STATUTS.map(s => (
-                  <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
+                <SelectItem value="ALL">Toutes les sources</SelectItem>
+                {SOURCES.map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -267,7 +250,7 @@ export default function CandidatsPage() {
               <User className="h-12 w-12 mx-auto mb-3 opacity-20" />
               <p className="font-medium">Aucun candidat trouvé</p>
               <p className="text-sm">
-                {searchQuery || filterStatut !== 'ALL' ? 'Essayez une autre recherche' : 'Ajoutez votre premier candidat'}
+                {searchQuery || filterSource !== 'ALL' ? 'Essayez une autre recherche' : 'Ajoutez votre premier candidat'}
               </p>
             </div>
           ) : (
@@ -279,14 +262,15 @@ export default function CandidatsPage() {
                     <TableHead>Poste recherché</TableHead>
                     <TableHead>Zone</TableHead>
                     <TableHead>Source</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Honoraire</TableHead>
+                    <TableHead>Process actifs</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredCandidats.map((candidat) => {
-                    const statutInfo = getStatutBadge(candidat.statut);
+                    const activeProcesses = getActiveProcesses(candidat.id);
+                    const totalProcesses = getProcessCount(candidat.id);
+                    
                     return (
                       <TableRow key={candidat.id} data-testid={`candidat-row-${candidat.id}`}>
                         <TableCell>
@@ -315,40 +299,25 @@ export default function CandidatsPage() {
                         </TableCell>
                         <TableCell>
                           {candidat.source ? (
-                            <span className="text-sm">{candidat.source}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {candidat.source}
+                            </Badge>
                           ) : (
                             <span className="text-muted-foreground text-sm">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className={`px-2 py-1 rounded-full text-xs font-medium ${statutInfo.color} cursor-pointer hover:opacity-80`}>
-                                {statutInfo.label}
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              {STATUTS.map(s => (
-                                <DropdownMenuItem 
-                                  key={s.code} 
-                                  onClick={() => updateStatut(candidat, s.code)}
-                                  className={candidat.statut === s.code ? 'bg-secondary' : ''}
-                                >
-                                  <span className={`w-2 h-2 rounded-full mr-2 ${s.color.split(' ')[0]}`}></span>
-                                  {s.label}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                        <TableCell>
-                          {candidat.statut === 'PCLT' && candidat.honoraire ? (
-                            <div className="flex items-center gap-1 text-green-600 font-medium">
-                              <Euro className="h-4 w-4" />
-                              {candidat.honoraire.toLocaleString('fr-FR')}
+                          {totalProcesses > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <Badge variant={activeProcesses.length > 0 ? "default" : "secondary"}>
+                                {activeProcesses.length} actif{activeProcesses.length > 1 ? 's' : ''}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                / {totalProcesses} total
+                              </span>
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="text-muted-foreground text-sm">Aucun</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -385,7 +354,7 @@ export default function CandidatsPage() {
 
       {/* Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="font-heading">
               {isEditing ? 'Modifier le candidat' : 'Ajouter un candidat'}
@@ -477,59 +446,21 @@ export default function CandidatsPage() {
                 </div>
               </div>
 
-              <div className="border-t pt-4 mt-2">
-                <p className="text-sm font-medium text-muted-foreground mb-3">Suivi & Source</p>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="source">Source du candidat</Label>
-                    <Select 
-                      value={formData.source} 
-                      onValueChange={(value) => setFormData({ ...formData, source: value })}
-                    >
-                      <SelectTrigger data-testid="candidat-source-select">
-                        <SelectValue placeholder="D'où vient-il ?" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SOURCES.map(source => (
-                          <SelectItem key={source} value={source}>{source}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="statut">Statut</Label>
-                    <Select 
-                      value={formData.statut} 
-                      onValueChange={(value) => setFormData({ ...formData, statut: value })}
-                    >
-                      <SelectTrigger data-testid="candidat-statut-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUTS.map(s => (
-                          <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {formData.statut === 'PCLT' && (
-                  <div className="space-y-2 mt-4">
-                    <Label htmlFor="honoraire">Montant honoraire (€)</Label>
-                    <Input
-                      id="honoraire"
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={formData.honoraire}
-                      onChange={(e) => setFormData({ ...formData, honoraire: e.target.value })}
-                      placeholder="Ex: 5000"
-                      data-testid="candidat-honoraire-input"
-                    />
-                  </div>
-                )}
+              <div className="space-y-2">
+                <Label htmlFor="source">Source du candidat</Label>
+                <Select 
+                  value={formData.source} 
+                  onValueChange={(value) => setFormData({ ...formData, source: value })}
+                >
+                  <SelectTrigger data-testid="candidat-source-select">
+                    <SelectValue placeholder="D'où vient-il ?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SOURCES.map(source => (
+                      <SelectItem key={source} value={source}>{source}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
