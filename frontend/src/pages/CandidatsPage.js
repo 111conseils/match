@@ -61,6 +61,7 @@ export default function CandidatsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSource, setFilterSource] = useState('ALL');
+  const [filterArchived, setFilterArchived] = useState('active'); // 'active', 'archived', 'all'
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCandidat, setCurrentCandidat] = useState(null);
