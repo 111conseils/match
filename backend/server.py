@@ -315,26 +315,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user: UserCreate):
-    # Check if user exists
-    existing = await db.users.find_one({"email": user.email}, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-    
-    # Create user
-    user_id = str(uuid.uuid4())
-    user_doc = {
-        "id": user_id,
-        "email": user.email,
-        "password_hash": hash_password(user.password),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(user_doc)
-    
-    token = create_token(user_id, user.email)
-    return TokenResponse(
-        access_token=token,
-        user=UserResponse(id=user_id, email=user.email)
-    )
+    # Inscription désactivée - application privée
+    raise HTTPException(status_code=403, detail="Les inscriptions sont fermées. Contactez l'administrateur.")
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user: UserLogin):
