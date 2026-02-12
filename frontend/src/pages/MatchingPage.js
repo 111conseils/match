@@ -158,6 +158,56 @@ export default function MatchingPage() {
     setIsModalOpen(true);
   };
 
+  // Rejeter un match (action croix du Tinder)
+  const rejectMatch = async (candidatId, posteId) => {
+    try {
+      await axios.post(
+        `${API_URL}/api/rejected-matches`,
+        { candidat_id: candidatId, poste_id: posteId },
+        { headers: getAuthHeaders() }
+      );
+      toast.success('Match rejeté');
+      
+      // Mettre à jour l'état local
+      setRejectedMatches([...rejectedMatches, { candidat_id: candidatId, poste_id: posteId }]);
+      
+      // Retirer le match de la liste affichée
+      if (activeTab === 'postes') {
+        setMatchesForPoste(matchesForPoste.filter(m => m.candidat.id !== candidatId));
+      } else {
+        setMatchesForCandidat(matchesForCandidat.filter(m => m.poste.id !== posteId));
+      }
+    } catch (error) {
+      console.error('Error rejecting match:', error);
+      toast.error('Erreur lors du rejet');
+    }
+  };
+
+  // Accepter un match = créer un process directement avec statut ENCV
+  const acceptMatch = async (candidat, poste) => {
+    try {
+      await axios.post(
+        `${API_URL}/api/process`,
+        {
+          candidat_id: candidat.id,
+          poste_id: poste.id,
+          statut: 'ENCV',
+          notes: null
+        },
+        { headers: getAuthHeaders() }
+      );
+      toast.success('Match accepté ! Process créé.');
+      
+      // Refresh processes
+      const processRes = await axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() });
+      setExistingProcesses(processRes.data);
+    } catch (error) {
+      console.error('Error accepting match:', error);
+      const message = error.response?.data?.detail || 'Erreur lors de l\'acceptation';
+      toast.error(message);
+    }
+  };
+
   const createProcess = async (e) => {
     e.preventDefault();
     if (!modalCandidat || !modalPoste) return;
