@@ -1,0 +1,179 @@
+{
+  "identity": {
+    "name": "E1 - Tactical Swiss",
+    "description": "A high-precision recruitment tool. Functional, dense, and authoritative. Eliminates fluff for speed and clarity.",
+    "principles": [
+      "Density is Clarity: Recruiters need data, not whitespace. Use dense grids.",
+      "Color is Signal: Use color ONLY to highlight matches or actions. The rest is monochrome.",
+      "Crisp Borders: 1px borders over shadows. Define structure clearly.",
+      "Typography is Interface: Use font weights to create hierarchy, not just size."
+    ]
+  },
+  "palette": {
+    "mode": "light",
+    "theme": "swiss_high_contrast",
+    "colors": {
+      "background": "#F8FAFC", 
+      "surface": "#FFFFFF",
+      "surface_subtle": "#F1F5F9",
+      "primary": "#0F172A", 
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#F1F5F9", 
+      "secondary_foreground": "#0F172A",
+      "accent": "#F97316", 
+      "accent_foreground": "#FFFFFF",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "border": "#E2E8F0",
+      "text_main": "#0F172A",
+      "text_muted": "#64748B"
+    },
+    "gradients": {
+      "match_score": "linear-gradient(135deg, #F97316 0%, #EA580C 100%)",
+      "none": "none"
+    }
+  },
+  "typography": {
+    "font_family_heading": "Manrope, sans-serif",
+    "font_family_body": "IBM Plex Sans, sans-serif",
+    "scale": {
+      "h1": "text-3xl font-bold tracking-tight",
+      "h2": "text-2xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold tracking-tight",
+      "body_lg": "text-base font-normal leading-relaxed",
+      "body_base": "text-sm font-normal leading-relaxed",
+      "body_sm": "text-xs font-medium uppercase tracking-wider",
+      "mono": "font-mono text-xs"
+    }
+  },
+  "layout": {
+    "spacing_scale": "generous",
+    "container_padding": "p-6 md:p-8 lg:p-12",
+    "grid_gap": "gap-4 md:gap-6",
+    "radius": {
+      "default": "rounded-md",
+      "small": "rounded-sm",
+      "large": "rounded-lg"
+    }
+  },
+  "components": {
+    "buttons": {
+      "style": "sharp",
+      "default": "h-10 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md font-medium text-sm transition-all shadow-sm active:translate-y-[1px]",
+      "outline": "h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md font-medium text-sm transition-all",
+      "ghost": "h-10 px-4 py-2 hover:bg-accent hover:text-accent-foreground rounded-md font-medium text-sm transition-all"
+    },
+    "cards": {
+      "style": "flat_border",
+      "base": "bg-card text-card-foreground rounded-lg border border-border shadow-sm p-6"
+    },
+    "badges": {
+      "style": "pill",
+      "base": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "variant_neutral": "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      "variant_outline": "text-foreground border-border"
+    },
+    "inputs": {
+      "style": "minimal",
+      "base": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "views": {
+    "login": {
+      "layout": "split_screen",
+      "left_panel": "bg-primary flex items-center justify-center p-12 text-white",
+      "right_panel": "flex items-center justify-center p-8 bg-background",
+      "features": ["Simple Email/Password Form", "Remember Me", "Clean Logo"]
+    },
+    "dashboard": {
+      "layout": "bento_grid_dense",
+      "sections": [
+        {
+          "name": "Stats Overview",
+          "span": "col-span-full",
+          "content": "4 Key Metrics: Total Candidates, Active Jobs, New Matches, Success Rate"
+        },
+        {
+          "name": "Recent Matches",
+          "span": "col-span-1 md:col-span-2 lg:col-span-3 row-span-2",
+          "content": "List of recent high-score matches. High density."
+        },
+        {
+          "name": "Quick Actions",
+          "span": "col-span-1 row-span-1",
+          "content": "Add Candidate, Add Job buttons."
+        }
+      ]
+    },
+    "candidates_list": {
+      "layout": "table_view",
+      "features": ["Search Bar", "Filter by Zone", "Sort by Score", "Avatar + Name Column", "Status Badge"]
+    },
+    "matching_view": {
+      "layout": "split_pane",
+      "left": "Job List (Select a job to see matches)",
+      "right": "Ranked Candidates List with Compatibility Score (0-100%)",
+      "match_card": "Highlight matching skills/zone in Green, missing in Red/Grey."
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "user_avatar",
+        "url": "https://images.unsplash.com/photo-1589220286904-3dcef62c68ee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0JTIwZGl2ZXJzZXxlbnwwfHx8fDE3NzA4ODA4NTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Professional woman avatar"
+      },
+      {
+        "category": "user_avatar",
+        "url": "https://images.unsplash.com/photo-1575299833801-85ce40813bac?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0JTIwZGl2ZXJzZXxlbnwwfHx8fDE3NzA4ODA4NTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Professional man avatar"
+      },
+      {
+        "category": "company_logo",
+        "url": "https://images.unsplash.com/photo-1762939079730-23708c0dd337?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjB0ZWNoJTIwY29tcGFueSUyMGxvZ28lMjBtaW5pbWFsfGVufDB8fHx8MTc3MDg4OTQwOXww&ixlib=rb-4.1.0&q=85",
+        "description": "Medical Tech Logo"
+      },
+      {
+        "category": "company_logo",
+        "url": "https://images.unsplash.com/photo-1628760584600-6c31148991e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjB0ZWNoJTIwY29tcGFueSUyMGxvZ28lMjBtaW5pbWFsfGVufDB8fHx8MTc3MDg4OTQwOXww&ixlib=rb-4.1.0&q=85",
+        "description": "Blue Abstract Logo"
+      }
+    ]
+  },
+  "icons": {
+    "library": "lucide-react",
+    "mapping": {
+      "dashboard": "LayoutDashboard",
+      "candidates": "Users",
+      "jobs": "Briefcase",
+      "match": "Zap",
+      "settings": "Settings",
+      "location": "MapPin",
+      "search": "Search",
+      "filter": "Filter",
+      "check": "CheckCircle2",
+      "x": "XCircle"
+    }
+  },
+  "universal_guidelines": [
+    "Use 'Manrope' for all Headings.",
+    "Use 'IBM Plex Sans' for all Body text.",
+    "Do NOT use gradients for backgrounds. Use flat colors or subtle noise textures.",
+    "Use 'lucide-react' for icons.",
+    "Use 'sonner' for toasts.",
+    "Ensure all interactive elements have a hover state (opacity-90 or bg-accent).",
+    "Layouts must be responsive. Mobile-first.",
+    "Use 'data-testid' for all key interactions.",
+    "For the 'Match Score', use a circular progress indicator or a bold percentage badge.",
+    "Dark mode is optional but if implemented, use Slate-950 as background, not pure black."
+  ],
+  "instructions_to_main_agent": [
+    "Install 'lucide-react', 'recharts', 'sonner' if not present.",
+    "Use the provided image URLs for mock data.",
+    "Implement the 'Bento Grid' for the dashboard.",
+    "Create a 'MatchCard' component that clearly visualizes the compatibility score.",
+    "Use the French terms 'Candidats' and 'Postes' in the UI labels.",
+    "Focus on the 'Tactical Swiss' aesthetic: clean, white, sharp borders, deep blue text."
+  ]
+}
