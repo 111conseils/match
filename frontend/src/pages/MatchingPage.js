@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Zap, MapPin, CheckCircle2, XCircle, Briefcase, Users, Building, Plus, ArrowRight } from 'lucide-react';
+import { Zap, MapPin, CheckCircle2, XCircle, Briefcase, Users, Building, Plus, ArrowRight, FileCheck, FileX } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -205,11 +205,22 @@ export default function MatchingPage() {
                       data-testid={`select-poste-${poste.id}`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
-                          <Building className="h-5 w-5 text-green-600" />
+                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          poste.convention_signee ? 'bg-green-100' : 'bg-orange-100'
+                        }`}>
+                          <Building className={`h-5 w-5 ${
+                            poste.convention_signee ? 'text-green-600' : 'text-orange-600'
+                          }`} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{poste.titre_poste}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{poste.titre_poste}</p>
+                            {poste.convention_signee ? (
+                              <FileCheck className="h-4 w-4 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <FileX className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground truncate">{poste.entreprise}</p>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                             <MapPin className="h-3 w-3" />
@@ -237,10 +248,21 @@ export default function MatchingPage() {
                 )}
               </CardTitle>
               {selectedPoste && (
-                <p className="text-sm text-muted-foreground">
-                  Pour le poste de <span className="font-medium">{selectedPoste.titre_poste}</span> chez{' '}
-                  <span className="font-medium">{selectedPoste.entreprise}</span>
-                </p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Pour le poste de <span className="font-medium">{selectedPoste.titre_poste}</span> chez{' '}
+                  <span className="font-medium">{selectedPoste.entreprise}</span></span>
+                  {selectedPoste.convention_signee ? (
+                    <Badge className="bg-green-100 text-green-700 text-xs">
+                      <FileCheck className="h-3 w-3 mr-1" />
+                      CV nominatif OK
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-orange-300 text-orange-600 text-xs">
+                      <FileX className="h-3 w-3 mr-1" />
+                      CV anonyme
+                    </Badge>
+                  )}
+                </div>
               )}
             </CardHeader>
             <CardContent className="p-0">
