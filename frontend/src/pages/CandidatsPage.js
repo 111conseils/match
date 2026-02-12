@@ -322,28 +322,59 @@ export default function CandidatsPage() {
       {/* Search & Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher par nom, ville, poste ou source..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-                data-testid="search-candidats-input"
-              />
+          <div className="flex flex-col gap-4">
+            {/* Archive filter tabs */}
+            <div className="flex gap-2">
+              <Button
+                variant={filterArchived === 'active' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterArchived('active')}
+                data-testid="filter-active-btn"
+              >
+                Actifs ({activeCount})
+              </Button>
+              <Button
+                variant={filterArchived === 'archived' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterArchived('archived')}
+                data-testid="filter-archived-btn"
+              >
+                <Archive className="h-4 w-4 mr-1" />
+                Archivés ({archivedCount})
+              </Button>
+              <Button
+                variant={filterArchived === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterArchived('all')}
+                data-testid="filter-all-btn"
+              >
+                Tous ({candidats.length})
+              </Button>
             </div>
-            <Select value={filterSource} onValueChange={setFilterSource}>
-              <SelectTrigger className="w-full sm:w-[200px]" data-testid="filter-source">
-                <SelectValue placeholder="Filtrer par source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Toutes les sources</SelectItem>
-                {SOURCES.map(s => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher par nom, ville, poste ou source..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                  data-testid="search-candidats-input"
+                />
+              </div>
+              <Select value={filterSource} onValueChange={setFilterSource}>
+                <SelectTrigger className="w-full sm:w-[200px]" data-testid="filter-source">
+                  <SelectValue placeholder="Filtrer par source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Toutes les sources</SelectItem>
+                  {SOURCES.map(s => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
