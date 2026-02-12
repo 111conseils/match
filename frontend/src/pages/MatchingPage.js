@@ -382,6 +382,7 @@ export default function MatchingPage() {
                               className={`p-4 rounded-lg border transition-all ${
                                 existingProcess ? 'border-primary/30 bg-primary/5' : 'border-border hover:border-primary/30'
                               }`}
+                              data-testid={`match-item-${match.candidat.id}`}
                             >
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -426,10 +427,31 @@ export default function MatchingPage() {
                                 
                                 <div className="flex flex-col items-end gap-2">
                                   <span className="score-badge high">100%</span>
-                                  {!existingProcess && (
-                                    <Button size="sm" onClick={() => openProcessModal(match.candidat, selectedPoste)}>
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Process
+                                  {!existingProcess ? (
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        size="icon" 
+                                        variant="outline"
+                                        className="h-10 w-10 rounded-full border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        onClick={() => rejectMatch(match.candidat.id, selectedPoste.id)}
+                                        data-testid={`reject-match-${match.candidat.id}`}
+                                        title="Rejeter ce match"
+                                      >
+                                        <X className="h-5 w-5" />
+                                      </Button>
+                                      <Button 
+                                        size="icon"
+                                        className="h-10 w-10 rounded-full bg-green-600 hover:bg-green-700 text-white"
+                                        onClick={() => acceptMatch(match.candidat, selectedPoste)}
+                                        data-testid={`accept-match-${match.candidat.id}`}
+                                        title="Accepter et créer un process"
+                                      >
+                                        <Check className="h-5 w-5" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" variant="outline" onClick={() => openProcessModal(match.candidat, selectedPoste)}>
+                                      Voir détails
                                     </Button>
                                   )}
                                 </div>
