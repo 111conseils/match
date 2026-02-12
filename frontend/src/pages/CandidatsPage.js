@@ -263,8 +263,14 @@ export default function CandidatsPage() {
       (c.source && c.source.toLowerCase().includes(query))
     );
     const matchesSource = filterSource === 'ALL' || c.source === filterSource;
-    return matchesSearch && matchesSource;
+    const matchesArchived = filterArchived === 'all' || 
+      (filterArchived === 'active' && !c.is_archived) ||
+      (filterArchived === 'archived' && c.is_archived);
+    return matchesSearch && matchesSource && matchesArchived;
   });
+
+  const activeCount = candidats.filter(c => !c.is_archived).length;
+  const archivedCount = candidats.filter(c => c.is_archived).length;
 
   if (loading) {
     return (
