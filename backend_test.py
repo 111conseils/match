@@ -290,16 +290,32 @@ class RecruitHubAPITester:
         else:
             print("   ⚠️  Skipping specific poste matching (no poste created)")
 
-    def test_stats(self):
-        """Test stats endpoint"""
+    def test_stats_and_sources(self):
+        """Test stats and sources endpoints"""
         print("\n" + "="*50)
-        print("TESTING STATS")
+        print("TESTING STATS AND SOURCES")
         print("="*50)
         
         self.run_test(
             "Get dashboard stats",
             "GET",
             "stats",
+            200
+        )
+        
+        # Test new sources stats endpoint
+        self.run_test(
+            "Get sources statistics",
+            "GET",
+            "stats/sources",
+            200
+        )
+        
+        # Test config endpoint for statuts and sources
+        self.run_test(
+            "Get statuts and sources config",
+            "GET",
+            "config/statuts",
             200
         )
 
