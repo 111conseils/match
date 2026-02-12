@@ -15,6 +15,10 @@ import jwt
 import bcrypt
 import math
 import io
+import httpx
+
+# Cache pour les coordonnées des villes (évite de rappeler l'API)
+city_coords_cache = {}
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
