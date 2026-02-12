@@ -989,6 +989,8 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
         for i, h in enumerate(headers):
             if 'prénom' in h or 'prenom' in h:
                 col_map['prenom'] = i
+            elif 'candidat' in h:
+                col_map['candidat'] = i  # Nom complet
             elif 'nom' in h and 'prénom' not in h and 'prenom' not in h:
                 col_map['nom'] = i
             elif 'poste' in h and 'recherch' in h:
@@ -997,40 +999,69 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                 col_map['titre_poste'] = col_map.get('titre_poste', i)
             elif 'ville' in h:
                 col_map['ville'] = i
+            elif 'département' in h or 'departement' in h or 'dept' in h:
+                col_map['departement'] = i
             elif 'rayon' in h or 'km' in h:
                 col_map['rayon_km'] = i
-            elif 'rémunération' in h or 'remuneration' in h or 'salaire' in h:
+            elif 'rémunération' in h or 'remuneration' in h or 'salaire' in h or h == 'rem':
                 col_map['remuneration'] = i
-            elif 'dispo' in h:
+            elif 'dispo' in h or 'disponibilité' in h or 'disponibilite' in h:
                 col_map['disponibilite'] = i
             elif 'source' in h:
                 col_map['source'] = i
+            elif 'réf' in h or 'ref' in h:
+                col_map['ref'] = i
         
         imported = 0
         errors = []
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             try:
-                # Extraire les valeurs
-                prenom = str(row[col_map.get('prenom', 0)] or '').strip() if col_map.get('prenom') is not None and row[col_map.get('prenom')] else ''
-                nom = str(row[col_map.get('nom', 1)] or '').strip() if col_map.get('nom') is not None and row[col_map.get('nom')] else ''
+                # Extraire prénom et nom
+                prenom = ''
+                nom = ''
                 
-                if not prenom or not nom:
+                # Si on a une colonne "Candidats" avec nom complet
+                if col_map.get('candidat') is not None and row[col_map.get('candidat')]:
+                    nom_complet = str(row[col_map.get('candidat')]).strip()
+                    parts = nom_complet.split(' ', 1)
+                    if len(parts) >= 2:
+                        prenom = parts[0]
+                        nom = parts[1]
+                    else:
+                        nom = nom_complet
+                        prenom = '-'
+                else:
+                    # Sinon colonnes séparées
+                    prenom = str(row[col_map.get('prenom', 0)] or '').strip() if col_map.get('prenom') is not None and len(row) > col_map.get('prenom', 0) and row[col_map.get('prenom')] else ''
+                    nom = str(row[col_map.get('nom', 1)] or '').strip() if col_map.get('nom') is not None and len(row) > col_map.get('nom', 1) and row[col_map.get('nom')] else ''
+                
+                if not prenom and not nom:
                     continue  # Ligne vide
                 
-                titre_poste = str(row[col_map.get('titre_poste', 2)] or '').strip() if col_map.get('titre_poste') is not None else ''
-                ville = str(row[col_map.get('ville', 3)] or '').strip() if col_map.get('ville') is not None else ''
+                if not prenom:
+                    prenom = '-'
+                if not nom:
+                    nom = '-'
+                
+                titre_poste = str(row[col_map.get('titre_poste')] or '').strip() if col_map.get('titre_poste') is not None and len(row) > col_map.get('titre_poste') else ''
+                ville = str(row[col_map.get('ville')] or '').strip() if col_map.get('ville') is not None and len(row) > col_map.get('ville') else ''
+                
+                # Si pas de ville mais un département
+                if not ville and col_map.get('departement') is not None and len(row) > col_map.get('departement'):
+                    ville = str(row[col_map.get('departement')] or '').strip()
                 
                 rayon_km = 30
-                if col_map.get('rayon_km') is not None and row[col_map.get('rayon_km')]:
+                if col_map.get('rayon_km') is not None and len(row) > col_map.get('rayon_km') and row[col_map.get('rayon_km')]:
                     try:
-                        rayon_km = int(row[col_map.get('rayon_km')])
+                        val = str(row[col_map.get('rayon_km')]).replace('km', '').replace('KM', '').strip()
+                        rayon_km = int(float(val))
                     except:
                         pass
                 
-                remuneration = str(row[col_map.get('remuneration')] or '').strip() if col_map.get('remuneration') is not None else ''
-                disponibilite = str(row[col_map.get('disponibilite')] or '').strip() if col_map.get('disponibilite') is not None else ''
-                source = str(row[col_map.get('source')] or '').strip() if col_map.get('source') is not None else None
+                remuneration = str(row[col_map.get('remuneration')] or '').strip() if col_map.get('remuneration') is not None and len(row) > col_map.get('remuneration') else ''
+                disponibilite = str(row[col_map.get('disponibilite')] or '').strip() if col_map.get('disponibilite') is not None and len(row) > col_map.get('disponibilite') else ''
+                source = str(row[col_map.get('source')] or '').strip() if col_map.get('source') is not None and len(row) > col_map.get('source') else None
                 
                 # Créer le candidat
                 candidat_doc = {
