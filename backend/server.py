@@ -377,13 +377,14 @@ FRENCH_CITIES = {
     "royan": (45.6167, -1.0333),
 }
 
-async def get_city_coords_from_api(city_name: str) -> Optional[tuple]:
+async def get_city_coords_from_api(city_name: str, code_postal: str = None) -> Optional[tuple]:
     """Récupère les coordonnées d'une ville via l'API Adresse du gouvernement"""
     try:
+        query = f"{city_name} {code_postal}" if code_postal else city_name
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(
                 "https://api-adresse.data.gouv.fr/search/",
-                params={"q": city_name, "type": "municipality", "limit": 1}
+                params={"q": query, "type": "municipality", "limit": 1}
             )
             if response.status_code == 200:
                 data = response.json()
@@ -414,29 +415,31 @@ def get_city_coords(city_name: str) -> Optional[tuple]:
     
     return None
 
-async def get_city_coords_async(city_name: str) -> Optional[tuple]:
+async def get_city_coords_async(city_name: str, code_postal: str = None) -> Optional[tuple]:
     """Get coordinates for a city name - version asynchrone avec API"""
-    normalized = city_name.lower().strip()
+    cache_key = f"{city_name.lower().strip()}_{code_postal or ''}"
     
     # Vérifier le cache d'abord
-    if normalized in city_coords_cache:
-        return city_coords_cache[normalized]
+    if cache_key in city_coords_cache:
+        return city_coords_cache[cache_key]
+    
+    normalized = city_name.lower().strip()
     
     # Vérifier dans la liste locale
     if normalized in FRENCH_CITIES:
-        city_coords_cache[normalized] = FRENCH_CITIES[normalized]
+        city_coords_cache[cache_key] = FRENCH_CITIES[normalized]
         return FRENCH_CITIES[normalized]
     
     # Try partial match dans la liste locale
     for city, coords in FRENCH_CITIES.items():
         if normalized in city or city in normalized:
-            city_coords_cache[normalized] = coords
+            city_coords_cache[cache_key] = coords
             return coords
     
     # Appeler l'API pour les villes non trouvées
-    coords = await get_city_coords_from_api(city_name)
+    coords = await get_city_coords_from_api(city_name, code_postal)
     if coords:
-        city_coords_cache[normalized] = coords
+        city_coords_cache[cache_key] = coords
         return coords
     
     return None
