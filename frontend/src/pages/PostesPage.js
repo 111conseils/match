@@ -20,7 +20,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building } from 'lucide-react';
+import { Switch } from '../components/ui/switch';
+import { Badge } from '../components/ui/badge';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -28,7 +30,8 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 const initialFormState = {
   entreprise: '',
   titre_poste: '',
-  ville: ''
+  ville: '',
+  convention_signee: false
 };
 
 export default function PostesPage() {
@@ -36,6 +39,7 @@ export default function PostesPage() {
   const [postes, setPostes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterConvention, setFilterConvention] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentPoste, setCurrentPoste] = useState(null);
@@ -71,7 +75,8 @@ export default function PostesPage() {
     setFormData({
       entreprise: poste.entreprise,
       titre_poste: poste.titre_poste,
-      ville: poste.ville
+      ville: poste.ville,
+      convention_signee: poste.convention_signee || false
     });
     setIsEditing(true);
     setCurrentPoste(poste);
@@ -123,14 +128,36 @@ export default function PostesPage() {
     }
   };
 
+  const toggleConvention = async (poste) => {
+    try {
+      await axios.put(
+        `${API_URL}/api/postes/${poste.id}`,
+        { convention_signee: !poste.convention_signee },
+        { headers: getAuthHeaders() }
+      );
+      toast.success(poste.convention_signee ? 'Convention retirée' : 'Convention validée');
+      fetchPostes();
+    } catch (error) {
+      console.error('Error toggling convention:', error);
+      toast.error('Erreur lors de la mise à jour');
+    }
+  };
+
   const filteredPostes = postes.filter(p => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       p.entreprise.toLowerCase().includes(query) ||
       p.titre_poste.toLowerCase().includes(query) ||
       p.ville.toLowerCase().includes(query)
     );
+    const matchesConvention = filterConvention === 'ALL' || 
+      (filterConvention === 'SIGNED' && p.convention_signee) ||
+      (filterConvention === 'NOT_SIGNED' && !p.convention_signee);
+    return matchesSearch && matchesConvention;
   });
+
+  const signedCount = postes.filter(p => p.convention_signee).length;
+  const notSignedCount = postes.filter(p => !p.convention_signee).length;
 
   if (loading) {
     return (
@@ -149,7 +176,9 @@ export default function PostesPage() {
             Postes
           </h1>
           <p className="text-muted-foreground mt-1">
-            {postes.length} poste{postes.length > 1 ? 's' : ''} à pourvoir
+            {postes.length} poste{postes.length > 1 ? 's' : ''} • 
+            <span className="text-green-600 ml-1">{signedCount} convention{signedCount > 1 ? 's' : ''}</span> • 
+            <span className="text-orange-600 ml-1">{notSignedCount} sans convention</span>
           </p>
         </div>
         <Button onClick={openCreateModal} data-testid="add-poste-btn">
@@ -158,18 +187,47 @@ export default function PostesPage() {
         </Button>
       </div>
 
-      {/* Search */}
+      {/* Search & Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher par entreprise, poste ou ville..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-              data-testid="search-postes-input"
-            />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par entreprise, poste ou ville..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+                data-testid="search-postes-input"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant={filterConvention === 'ALL' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterConvention('ALL')}
+              >
+                Tous
+              </Button>
+              <Button 
+                variant={filterConvention === 'SIGNED' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterConvention('SIGNED')}
+                className={filterConvention === 'SIGNED' ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
+                <FileCheck className="h-4 w-4 mr-1" />
+                Convention
+              </Button>
+              <Button 
+                variant={filterConvention === 'NOT_SIGNED' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterConvention('NOT_SIGNED')}
+                className={filterConvention === 'NOT_SIGNED' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+              >
+                <FileX className="h-4 w-4 mr-1" />
+                Sans convention
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -182,7 +240,7 @@ export default function PostesPage() {
               <Briefcase className="h-12 w-12 mx-auto mb-3 opacity-20" />
               <p className="font-medium">Aucun poste trouvé</p>
               <p className="text-sm">
-                {searchQuery ? 'Essayez une autre recherche' : 'Ajoutez votre premier poste'}
+                {searchQuery || filterConvention !== 'ALL' ? 'Essayez une autre recherche' : 'Ajoutez votre premier poste'}
               </p>
             </div>
           ) : (
@@ -193,16 +251,29 @@ export default function PostesPage() {
                     <TableHead>Entreprise</TableHead>
                     <TableHead>Poste</TableHead>
                     <TableHead>Localisation</TableHead>
+                    <TableHead>Convention</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPostes.map((poste) => (
-                    <TableRow key={poste.id} data-testid={`poste-row-${poste.id}`}>
+                    <TableRow 
+                      key={poste.id} 
+                      data-testid={`poste-row-${poste.id}`}
+                      className={poste.convention_signee ? 'bg-green-50/50' : 'bg-orange-50/30'}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center">
-                            <Building className="h-5 w-5 text-green-600" />
+                          <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                            poste.convention_signee 
+                              ? 'bg-green-100' 
+                              : 'bg-orange-100'
+                          }`}>
+                            <Building className={`h-5 w-5 ${
+                              poste.convention_signee 
+                                ? 'text-green-600' 
+                                : 'text-orange-600'
+                            }`} />
                           </div>
                           <span className="font-medium">{poste.entreprise}</span>
                         </div>
@@ -215,6 +286,25 @@ export default function PostesPage() {
                           <MapPin className="h-4 w-4" />
                           <span>{poste.ville}</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          onClick={() => toggleConvention(poste)}
+                          className="flex items-center gap-2 cursor-pointer"
+                          data-testid={`toggle-convention-${poste.id}`}
+                        >
+                          {poste.convention_signee ? (
+                            <Badge className="bg-green-100 text-green-700 hover:bg-green-200">
+                              <FileCheck className="h-3 w-3 mr-1" />
+                              Signée
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-orange-300 text-orange-600 hover:bg-orange-50">
+                              <FileX className="h-3 w-3 mr-1" />
+                              Non signée
+                            </Badge>
+                          )}
+                        </button>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -290,6 +380,23 @@ export default function PostesPage() {
                   placeholder="Ex: Bordeaux"
                   required
                   data-testid="poste-ville-input"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div className="space-y-0.5">
+                  <Label htmlFor="convention" className="text-base">Convention signée</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {formData.convention_signee 
+                      ? 'Vous pouvez envoyer les CV nominatifs' 
+                      : 'Envoyez les CV en anonyme'}
+                  </p>
+                </div>
+                <Switch
+                  id="convention"
+                  checked={formData.convention_signee}
+                  onCheckedChange={(checked) => setFormData({ ...formData, convention_signee: checked })}
+                  data-testid="poste-convention-switch"
                 />
               </div>
             </div>
