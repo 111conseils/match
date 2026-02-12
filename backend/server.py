@@ -74,6 +74,7 @@ class CandidatCreate(BaseModel):
     nom: str
     prenom: str
     ville: str
+    code_postal: Optional[str] = None
     rayon_km: int = 30
     titre_poste: str
     remuneration: Optional[str] = None
@@ -84,6 +85,7 @@ class CandidatUpdate(BaseModel):
     nom: Optional[str] = None
     prenom: Optional[str] = None
     ville: Optional[str] = None
+    code_postal: Optional[str] = None
     rayon_km: Optional[int] = None
     titre_poste: Optional[str] = None
     remuneration: Optional[str] = None
@@ -96,6 +98,7 @@ class Candidat(BaseModel):
     nom: str
     prenom: str
     ville: str
+    code_postal: Optional[str] = None
     rayon_km: int = 30
     titre_poste: str
     remuneration: Optional[str] = None
@@ -132,6 +135,7 @@ class PosteCreate(BaseModel):
     entreprise: str
     titre_poste: str
     ville: str
+    code_postal: Optional[str] = None
     convention_signee: bool = False
     contact: Optional[str] = None
     email_contact: Optional[str] = None
@@ -140,6 +144,7 @@ class PosteUpdate(BaseModel):
     entreprise: Optional[str] = None
     titre_poste: Optional[str] = None
     ville: Optional[str] = None
+    code_postal: Optional[str] = None
     convention_signee: Optional[bool] = None
     contact: Optional[str] = None
     email_contact: Optional[str] = None
@@ -150,6 +155,7 @@ class Poste(BaseModel):
     entreprise: str
     titre_poste: str
     ville: str
+    code_postal: Optional[str] = None
     convention_signee: bool = False
     contact: Optional[str] = None
     email_contact: Optional[str] = None
