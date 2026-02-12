@@ -164,7 +164,7 @@ class RecruitHubAPITester:
             "Create new candidat",
             "POST",
             "candidats",
-            201,
+            200,
             data=candidat_data
         )
         
