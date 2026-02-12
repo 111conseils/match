@@ -136,9 +136,9 @@ class RecruitHubAPITester:
         return True
 
     def test_candidats_crud(self):
-        """Test candidates CRUD operations"""
+        """Test candidates CRUD operations with new features"""
         print("\n" + "="*50)
-        print("TESTING CANDIDATS CRUD")
+        print("TESTING CANDIDATS CRUD WITH NEW FEATURES")
         print("="*50)
         
         # List candidats (should work even if empty)
@@ -149,7 +149,7 @@ class RecruitHubAPITester:
             200
         )
         
-        # Create a new candidat
+        # Create a new candidat with source and status
         candidat_data = {
             "nom": "Dupont",
             "prenom": "Marie",
@@ -157,11 +157,13 @@ class RecruitHubAPITester:
             "rayon_km": 30,
             "titre_poste": "Développeur Web",
             "remuneration": "35-40K€",
-            "disponibilite": "Immédiate"
+            "disponibilite": "Immédiate",
+            "statut": "NOUVEAU",
+            "source": "LinkedIn"
         }
         
         success, response = self.run_test(
-            "Create new candidat",
+            "Create new candidat with source and status",
             "POST",
             "candidats",
             200,
@@ -180,19 +182,30 @@ class RecruitHubAPITester:
                 200
             )
             
-            # Update the candidat
+            # Update the candidat status to PCLT with honoraire
             update_data = {
-                "ville": "Lyon",
-                "remuneration": "40-45K€"
+                "statut": "PCLT",
+                "honoraire": 8000.0,
+                "source": "Indeed"
             }
             
             self.run_test(
-                "Update candidat",
+                "Update candidat status to PCLT with honoraire",
                 "PUT",
                 f"candidats/{self.created_candidat_id}",
                 200,
                 data=update_data
             )
+            
+            # Test different status updates
+            for status in ["ENCV", "ENTC", "PROPALE", "REFUS", "NOGO_DISPO"]:
+                self.run_test(
+                    f"Update candidat status to {status}",
+                    "PUT",
+                    f"candidats/{self.created_candidat_id}",
+                    200,
+                    data={"statut": status}
+                )
         
         return True
 
