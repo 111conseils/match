@@ -828,7 +828,7 @@ async def export_postes_excel(current_user: dict = Depends(get_current_user)):
     )
     
     # Headers
-    headers = ["Entreprise", "Poste", "Ville", "Convention", "Process en cours", 
+    headers = ["Entreprise", "Poste", "Ville", "Contact", "Email", "Convention", "Process en cours", 
                "Candidats placés", "Date création"]
     
     for col, header in enumerate(headers, 1):
@@ -848,6 +848,8 @@ async def export_postes_excel(current_user: dict = Depends(get_current_user)):
             poste.get('entreprise', ''),
             poste.get('titre_poste', ''),
             poste.get('ville', ''),
+            poste.get('contact', ''),
+            poste.get('email_contact', ''),
             "Oui" if poste.get('convention_signee') else "Non",
             len(active_procs),
             len(placed),
@@ -863,7 +865,7 @@ async def export_postes_excel(current_user: dict = Depends(get_current_user)):
             cell.fill = row_fill
     
     # Adjust column widths
-    column_widths = [20, 25, 15, 12, 15, 15, 12]
+    column_widths = [20, 25, 15, 20, 25, 12, 15, 15, 12]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[chr(64 + i)].width = width
     
