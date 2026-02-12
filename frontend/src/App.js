@@ -6,6 +6,7 @@ import DashboardPage from "./pages/DashboardPage";
 import CandidatsPage from "./pages/CandidatsPage";
 import PostesPage from "./pages/PostesPage";
 import MatchingPage from "./pages/MatchingPage";
+import ProcessPage from "./pages/ProcessPage";
 import SourcesPage from "./pages/SourcesPage";
 import Layout from "./components/Layout";
 import "./App.css";
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="candidats" element={<CandidatsPage />} />
         <Route path="postes" element={<PostesPage />} />
         <Route path="matching" element={<MatchingPage />} />
+        <Route path="process" element={<ProcessPage />} />
         <Route path="sources" element={<SourcesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

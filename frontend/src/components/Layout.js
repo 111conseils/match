@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Users, Briefcase, Zap, LogOut, Menu, X, PieChart } from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, Zap, LogOut, Menu, X, PieChart, ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useState } from 'react';
 
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/candidats', icon: Users, label: 'Candidats' },
   { to: '/postes', icon: Briefcase, label: 'Postes' },
   { to: '/matching', icon: Zap, label: 'Matching' },
+  { to: '/process', icon: ArrowRightLeft, label: 'Process' },
   { to: '/sources', icon: PieChart, label: 'Sources' },
 ];
 
