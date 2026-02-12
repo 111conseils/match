@@ -29,7 +29,7 @@ export default function Layout() {
       <aside className="hidden lg:flex lg:flex-col w-64 bg-card border-r border-border">
         <div className="p-6 border-b border-border">
           <h1 className="text-xl font-bold font-heading text-primary tracking-tight">
-            RecruitHub
+            111 conseils
           </h1>
           <p className="text-xs text-muted-foreground mt-1">Matching intelligent</p>
         </div>
@@ -75,7 +75,7 @@ export default function Layout() {
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="flex items-center justify-between p-4">
-          <h1 className="text-lg font-bold font-heading text-primary">RecruitHub</h1>
+          <h1 className="text-lg font-bold font-heading text-primary">111 conseils</h1>
           <Button
             variant="ghost"
             size="icon"
