@@ -126,11 +126,13 @@ class PosteCreate(BaseModel):
     entreprise: str
     titre_poste: str
     ville: str
+    convention_signee: bool = False
 
 class PosteUpdate(BaseModel):
     entreprise: Optional[str] = None
     titre_poste: Optional[str] = None
     ville: Optional[str] = None
+    convention_signee: Optional[bool] = None
 
 class Poste(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -138,6 +140,7 @@ class Poste(BaseModel):
     entreprise: str
     titre_poste: str
     ville: str
+    convention_signee: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Match Model
