@@ -463,7 +463,7 @@ def titles_match(title1: str, title2: str) -> bool:
     return t1 == t2 or t1 in t2 or t2 in t1
 
 def calculate_match_score(candidat: dict, poste: dict) -> dict:
-    """Calculate matching score between a candidate and a job position"""
+    """Calculate matching score between a candidate and a job position - version synchrone"""
     score = 0
     titre_match = False
     zone_match = False
@@ -489,6 +489,39 @@ def calculate_match_score(candidat: dict, poste: dict) -> dict:
             score += zone_score
     elif candidat['ville'].lower().strip() == poste['ville'].lower().strip():
         # Same city name
+        score += 50
+        zone_match = True
+    
+    return {
+        'score': int(score),
+        'titre_match': titre_match,
+        'zone_match': zone_match
+    }
+
+async def calculate_match_score_async(candidat: dict, poste: dict) -> dict:
+    """Calculate matching score - version asynchrone avec géocodage API"""
+    score = 0
+    titre_match = False
+    zone_match = False
+    
+    # Title matching (50% weight)
+    if titles_match(candidat['titre_poste'], poste['titre_poste']):
+        score += 50
+        titre_match = True
+    
+    # Geographic matching (50% weight)
+    candidat_coords = await get_city_coords_async(candidat['ville'])
+    poste_coords = await get_city_coords_async(poste['ville'])
+    
+    if candidat_coords and poste_coords:
+        distance = calculate_distance_km(candidat_coords, poste_coords)
+        rayon = candidat.get('rayon_km', 30)
+        
+        if distance <= rayon:
+            zone_match = True
+            zone_score = max(0, 50 * (1 - distance / rayon))
+            score += zone_score
+    elif candidat['ville'].lower().strip() == poste['ville'].lower().strip():
         score += 50
         zone_match = True
     
