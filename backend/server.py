@@ -791,7 +791,7 @@ async def get_matches_for_poste(poste_id: str, current_user: dict = Depends(get_
     matches = []
     
     for candidat in candidats:
-        match_result = calculate_match_score(candidat, poste)
+        match_result = await calculate_match_score_async(candidat, poste)
         if match_result['score'] > 0:
             if isinstance(candidat.get('created_at'), str):
                 candidat['created_at'] = datetime.fromisoformat(candidat['created_at'])
@@ -820,7 +820,7 @@ async def get_all_matches(current_user: dict = Depends(get_current_user)):
         
         poste_matches = []
         for candidat in candidats:
-            match_result = calculate_match_score(candidat, poste)
+            match_result = await calculate_match_score_async(candidat, poste)
             if match_result['score'] > 0:
                 if isinstance(candidat.get('created_at'), str):
                     candidat['created_at'] = datetime.fromisoformat(candidat['created_at'])
