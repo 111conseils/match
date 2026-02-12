@@ -519,8 +519,8 @@ async def calculate_match_score_async(candidat: dict, poste: dict) -> dict:
         titre_match = True
     
     # Geographic matching (50% weight)
-    candidat_coords = await get_city_coords_async(candidat['ville'])
-    poste_coords = await get_city_coords_async(poste['ville'])
+    candidat_coords = await get_city_coords_async(candidat['ville'], candidat.get('code_postal'))
+    poste_coords = await get_city_coords_async(poste['ville'], poste.get('code_postal'))
     
     if candidat_coords and poste_coords:
         distance = calculate_distance_km(candidat_coords, poste_coords)
