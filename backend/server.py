@@ -721,6 +721,261 @@ async def get_statuts():
         "sources": SOURCES_CANDIDAT
     }
 
+# ============ EXPORT EXCEL ROUTES ============
+
+@api_router.get("/export/candidats")
+async def export_candidats_excel(current_user: dict = Depends(get_current_user)):
+    """Export des candidats en Excel"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    
+    candidats = await db.candidats.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    processes = await db.process.find({}, {"_id": 0}).to_list(10000)
+    
+    # Index des process par candidat
+    process_by_candidat = {}
+    for proc in processes:
+        cid = proc['candidat_id']
+        if cid not in process_by_candidat:
+            process_by_candidat[cid] = []
+        process_by_candidat[cid].append(proc)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Candidats"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Headers
+    headers = ["Prénom", "Nom", "Poste recherché", "Ville", "Rayon (km)", 
+               "Rémunération", "Disponibilité", "Source", "Process actifs", "Date création"]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    
+    # Data
+    for row, candidat in enumerate(candidats, 2):
+        procs = process_by_candidat.get(candidat['id'], [])
+        active_procs = [p for p in procs if p['statut'] not in ['PCLT', 'REFUS', 'NOGO_DISPO']]
+        
+        data = [
+            candidat.get('prenom', ''),
+            candidat.get('nom', ''),
+            candidat.get('titre_poste', ''),
+            candidat.get('ville', ''),
+            candidat.get('rayon_km', 30),
+            candidat.get('remuneration', ''),
+            candidat.get('disponibilite', ''),
+            candidat.get('source', ''),
+            len(active_procs),
+            candidat.get('created_at', '')[:10] if candidat.get('created_at') else ''
+        ]
+        
+        for col, value in enumerate(data, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='left')
+    
+    # Adjust column widths
+    column_widths = [12, 15, 25, 15, 12, 15, 15, 20, 12, 12]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"candidats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/export/postes")
+async def export_postes_excel(current_user: dict = Depends(get_current_user)):
+    """Export des postes en Excel"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    
+    postes = await db.postes.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    processes = await db.process.find({}, {"_id": 0}).to_list(10000)
+    
+    # Index des process par poste
+    process_by_poste = {}
+    for proc in processes:
+        pid = proc['poste_id']
+        if pid not in process_by_poste:
+            process_by_poste[pid] = []
+        process_by_poste[pid].append(proc)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Postes"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    green_fill = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")
+    orange_fill = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Headers
+    headers = ["Entreprise", "Poste", "Ville", "Convention", "Process en cours", 
+               "Candidats placés", "Date création"]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    
+    # Data
+    for row, poste in enumerate(postes, 2):
+        procs = process_by_poste.get(poste['id'], [])
+        active_procs = [p for p in procs if p['statut'] not in ['PCLT', 'REFUS', 'NOGO_DISPO']]
+        placed = [p for p in procs if p['statut'] == 'PCLT']
+        
+        data = [
+            poste.get('entreprise', ''),
+            poste.get('titre_poste', ''),
+            poste.get('ville', ''),
+            "Oui" if poste.get('convention_signee') else "Non",
+            len(active_procs),
+            len(placed),
+            poste.get('created_at', '')[:10] if poste.get('created_at') else ''
+        ]
+        
+        row_fill = green_fill if poste.get('convention_signee') else orange_fill
+        
+        for col, value in enumerate(data, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='left')
+            cell.fill = row_fill
+    
+    # Adjust column widths
+    column_widths = [20, 25, 15, 12, 15, 15, 12]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"postes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/export/process")
+async def export_process_excel(current_user: dict = Depends(get_current_user)):
+    """Export des process en Excel"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    
+    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(10000)
+    candidats = {c['id']: c for c in await db.candidats.find({}, {"_id": 0}).to_list(10000)}
+    postes = {p['id']: p for p in await db.postes.find({}, {"_id": 0}).to_list(10000)}
+    
+    STATUT_LABELS = {
+        "ENCV": "Envoyé au client",
+        "ENTC": "Entretien client", 
+        "PROPALE": "Sous proposition",
+        "PCLT": "Placé",
+        "REFUS": "Refus",
+        "NOGO_DISPO": "Plus disponible"
+    }
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Process"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Headers
+    headers = ["Candidat", "Poste candidat", "Entreprise", "Poste entreprise", 
+               "Ville", "Statut", "Honoraire (€)", "Notes", "Dernière MAJ"]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    
+    # Data
+    for row, proc in enumerate(processes, 2):
+        candidat = candidats.get(proc['candidat_id'], {})
+        poste = postes.get(proc['poste_id'], {})
+        
+        data = [
+            f"{candidat.get('prenom', '')} {candidat.get('nom', '')}",
+            candidat.get('titre_poste', ''),
+            poste.get('entreprise', ''),
+            poste.get('titre_poste', ''),
+            poste.get('ville', ''),
+            STATUT_LABELS.get(proc.get('statut', ''), proc.get('statut', '')),
+            proc.get('honoraire', ''),
+            proc.get('notes', ''),
+            proc.get('updated_at', '')[:10] if proc.get('updated_at') else ''
+        ]
+        
+        for col, value in enumerate(data, 1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='left')
+    
+    # Adjust column widths
+    column_widths = [20, 20, 20, 20, 15, 18, 12, 30, 12]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"process_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # Include router
 app.include_router(api_router)
 
