@@ -958,6 +958,172 @@ async def export_process_excel(current_user: dict = Depends(get_current_user)):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+# ============ IMPORT EXCEL ROUTES ============
+
+@api_router.post("/import/candidats")
+async def import_candidats_excel(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Import des candidats depuis Excel"""
+    from openpyxl import load_workbook
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Le fichier doit être au format Excel (.xlsx)")
+    
+    try:
+        contents = await file.read()
+        wb = load_workbook(filename=io.BytesIO(contents))
+        ws = wb.active
+        
+        # Lire les headers
+        headers = [cell.value.lower().strip() if cell.value else '' for cell in ws[1]]
+        
+        # Mapping des colonnes
+        col_map = {}
+        for i, h in enumerate(headers):
+            if 'prénom' in h or 'prenom' in h:
+                col_map['prenom'] = i
+            elif 'nom' in h and 'prénom' not in h and 'prenom' not in h:
+                col_map['nom'] = i
+            elif 'poste' in h and 'recherch' in h:
+                col_map['titre_poste'] = i
+            elif 'poste' in h or 'titre' in h:
+                col_map['titre_poste'] = col_map.get('titre_poste', i)
+            elif 'ville' in h:
+                col_map['ville'] = i
+            elif 'rayon' in h or 'km' in h:
+                col_map['rayon_km'] = i
+            elif 'rémunération' in h or 'remuneration' in h or 'salaire' in h:
+                col_map['remuneration'] = i
+            elif 'dispo' in h:
+                col_map['disponibilite'] = i
+            elif 'source' in h:
+                col_map['source'] = i
+        
+        imported = 0
+        errors = []
+        
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                # Extraire les valeurs
+                prenom = str(row[col_map.get('prenom', 0)] or '').strip() if col_map.get('prenom') is not None and row[col_map.get('prenom')] else ''
+                nom = str(row[col_map.get('nom', 1)] or '').strip() if col_map.get('nom') is not None and row[col_map.get('nom')] else ''
+                
+                if not prenom or not nom:
+                    continue  # Ligne vide
+                
+                titre_poste = str(row[col_map.get('titre_poste', 2)] or '').strip() if col_map.get('titre_poste') is not None else ''
+                ville = str(row[col_map.get('ville', 3)] or '').strip() if col_map.get('ville') is not None else ''
+                
+                rayon_km = 30
+                if col_map.get('rayon_km') is not None and row[col_map.get('rayon_km')]:
+                    try:
+                        rayon_km = int(row[col_map.get('rayon_km')])
+                    except:
+                        pass
+                
+                remuneration = str(row[col_map.get('remuneration')] or '').strip() if col_map.get('remuneration') is not None else ''
+                disponibilite = str(row[col_map.get('disponibilite')] or '').strip() if col_map.get('disponibilite') is not None else ''
+                source = str(row[col_map.get('source')] or '').strip() if col_map.get('source') is not None else None
+                
+                # Créer le candidat
+                candidat_doc = {
+                    "id": str(uuid.uuid4()),
+                    "prenom": prenom,
+                    "nom": nom,
+                    "titre_poste": titre_poste or "Non renseigné",
+                    "ville": ville or "Non renseigné",
+                    "rayon_km": rayon_km,
+                    "remuneration": remuneration or None,
+                    "disponibilite": disponibilite or None,
+                    "source": source,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                await db.candidats.insert_one(candidat_doc)
+                imported += 1
+                
+            except Exception as e:
+                errors.append(f"Ligne {row_idx}: {str(e)}")
+        
+        return {
+            "success": True,
+            "imported": imported,
+            "errors": errors[:10]  # Max 10 erreurs
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur lors de la lecture du fichier: {str(e)}")
+
+@api_router.post("/import/postes")
+async def import_postes_excel(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Import des postes depuis Excel"""
+    from openpyxl import load_workbook
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Le fichier doit être au format Excel (.xlsx)")
+    
+    try:
+        contents = await file.read()
+        wb = load_workbook(filename=io.BytesIO(contents))
+        ws = wb.active
+        
+        # Lire les headers
+        headers = [cell.value.lower().strip() if cell.value else '' for cell in ws[1]]
+        
+        # Mapping des colonnes
+        col_map = {}
+        for i, h in enumerate(headers):
+            if 'entreprise' in h or 'société' in h or 'societe' in h or 'client' in h:
+                col_map['entreprise'] = i
+            elif 'poste' in h or 'titre' in h or 'intitulé' in h:
+                col_map['titre_poste'] = col_map.get('titre_poste', i)
+            elif 'ville' in h or 'lieu' in h or 'localisation' in h:
+                col_map['ville'] = i
+            elif 'convention' in h:
+                col_map['convention_signee'] = i
+        
+        imported = 0
+        errors = []
+        
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                entreprise = str(row[col_map.get('entreprise', 0)] or '').strip() if col_map.get('entreprise') is not None and row[col_map.get('entreprise')] else ''
+                
+                if not entreprise:
+                    continue  # Ligne vide
+                
+                titre_poste = str(row[col_map.get('titre_poste', 1)] or '').strip() if col_map.get('titre_poste') is not None else ''
+                ville = str(row[col_map.get('ville', 2)] or '').strip() if col_map.get('ville') is not None else ''
+                
+                convention_signee = False
+                if col_map.get('convention_signee') is not None and row[col_map.get('convention_signee')]:
+                    val = str(row[col_map.get('convention_signee')]).lower().strip()
+                    convention_signee = val in ('oui', 'yes', 'true', '1', 'signée', 'signee')
+                
+                # Créer le poste
+                poste_doc = {
+                    "id": str(uuid.uuid4()),
+                    "entreprise": entreprise,
+                    "titre_poste": titre_poste or "Non renseigné",
+                    "ville": ville or "Non renseigné",
+                    "convention_signee": convention_signee,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                await db.postes.insert_one(poste_doc)
+                imported += 1
+                
+            except Exception as e:
+                errors.append(f"Ligne {row_idx}: {str(e)}")
+        
+        return {
+            "success": True,
+            "imported": imported,
+            "errors": errors[:10]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur lors de la lecture du fichier: {str(e)}")
+
 # Include router
 app.include_router(api_router)
 
