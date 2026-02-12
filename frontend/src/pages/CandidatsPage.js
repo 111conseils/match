@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -174,6 +174,30 @@ export default function CandidatsPage() {
     return processMap[candidatId]?.filter(p => !['PCLT', 'REFUS', 'NOGO_DISPO'].includes(p.statut)) || [];
   };
 
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/export/candidats`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `candidats_${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Export téléchargé !');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Erreur lors de l\'export');
+    }
+  };
+
   const filteredCandidats = candidats.filter(c => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
@@ -207,10 +231,16 @@ export default function CandidatsPage() {
             {candidats.length} candidat{candidats.length > 1 ? 's' : ''} enregistré{candidats.length > 1 ? 's' : ''}
           </p>
         </div>
-        <Button onClick={openCreateModal} data-testid="add-candidat-btn">
-          <Plus className="h-4 w-4 mr-2" />
-          Ajouter un candidat
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} data-testid="export-candidats-btn">
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button onClick={openCreateModal} data-testid="add-candidat-btn">
+            <Plus className="h-4 w-4 mr-2" />
+            Ajouter un candidat
+          </Button>
+        </div>
       </div>
 
       {/* Search & Filters */}
