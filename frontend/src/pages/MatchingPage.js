@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Zap, MapPin, CheckCircle2, Briefcase, Users, Building, Plus, ArrowRight, FileCheck, FileX, User } from 'lucide-react';
+import { Zap, MapPin, CheckCircle2, Briefcase, Users, Building, Plus, ArrowRight, FileCheck, FileX, User, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
