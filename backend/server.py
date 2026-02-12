@@ -371,15 +371,68 @@ FRENCH_CITIES = {
     "royan": (45.6167, -1.0333),
 }
 
+async def get_city_coords_from_api(city_name: str) -> Optional[tuple]:
+    """Récupère les coordonnées d'une ville via l'API Adresse du gouvernement"""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "https://api-adresse.data.gouv.fr/search/",
+                params={"q": city_name, "type": "municipality", "limit": 1}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("features") and len(data["features"]) > 0:
+                    coords = data["features"][0]["geometry"]["coordinates"]
+                    # L'API retourne [longitude, latitude], on inverse
+                    return (coords[1], coords[0])
+    except Exception as e:
+        logging.warning(f"Erreur géocodage {city_name}: {e}")
+    return None
+
 def get_city_coords(city_name: str) -> Optional[tuple]:
-    """Get coordinates for a city name"""
+    """Get coordinates for a city name - version synchrone pour compatibilité"""
     normalized = city_name.lower().strip()
+    
+    # Vérifier le cache d'abord
+    if normalized in city_coords_cache:
+        return city_coords_cache[normalized]
+    
+    # Vérifier dans la liste locale
     if normalized in FRENCH_CITIES:
         return FRENCH_CITIES[normalized]
-    # Try partial match
+    
+    # Try partial match dans la liste locale
     for city, coords in FRENCH_CITIES.items():
         if normalized in city or city in normalized:
             return coords
+    
+    return None
+
+async def get_city_coords_async(city_name: str) -> Optional[tuple]:
+    """Get coordinates for a city name - version asynchrone avec API"""
+    normalized = city_name.lower().strip()
+    
+    # Vérifier le cache d'abord
+    if normalized in city_coords_cache:
+        return city_coords_cache[normalized]
+    
+    # Vérifier dans la liste locale
+    if normalized in FRENCH_CITIES:
+        city_coords_cache[normalized] = FRENCH_CITIES[normalized]
+        return FRENCH_CITIES[normalized]
+    
+    # Try partial match dans la liste locale
+    for city, coords in FRENCH_CITIES.items():
+        if normalized in city or city in normalized:
+            city_coords_cache[normalized] = coords
+            return coords
+    
+    # Appeler l'API pour les villes non trouvées
+    coords = await get_city_coords_from_api(city_name)
+    if coords:
+        city_coords_cache[normalized] = coords
+        return coords
+    
     return None
 
 def calculate_distance_km(coord1: tuple, coord2: tuple) -> float:
