@@ -31,6 +31,7 @@ const initialFormState = {
   entreprise: '',
   titre_poste: '',
   ville: '',
+  code_postal: '',
   convention_signee: false,
   contact: '',
   email_contact: ''
@@ -78,6 +79,7 @@ export default function PostesPage() {
       entreprise: poste.entreprise,
       titre_poste: poste.titre_poste,
       ville: poste.ville,
+      code_postal: poste.code_postal || '',
       convention_signee: poste.convention_signee || false,
       contact: poste.contact || '',
       email_contact: poste.email_contact || ''
@@ -371,6 +373,7 @@ export default function PostesPage() {
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <MapPin className="h-4 w-4" />
                           <span>{poste.ville}</span>
+                          {poste.code_postal && <span className="text-xs">({poste.code_postal})</span>}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -475,16 +478,28 @@ export default function PostesPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ville">Ville</Label>
-                <Input
-                  id="ville"
-                  value={formData.ville}
-                  onChange={(e) => setFormData({ ...formData, ville: e.target.value })}
-                  placeholder="Ex: Bordeaux"
-                  required
-                  data-testid="poste-ville-input"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ville">Ville</Label>
+                  <Input
+                    id="ville"
+                    value={formData.ville}
+                    onChange={(e) => setFormData({ ...formData, ville: e.target.value })}
+                    placeholder="Ex: Bordeaux"
+                    required
+                    data-testid="poste-ville-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="code_postal">Code postal</Label>
+                  <Input
+                    id="code_postal"
+                    value={formData.code_postal}
+                    onChange={(e) => setFormData({ ...formData, code_postal: e.target.value })}
+                    placeholder="Ex: 33000"
+                    data-testid="poste-cp-input"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
