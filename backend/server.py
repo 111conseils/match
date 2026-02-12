@@ -625,14 +625,19 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             if match_result['score'] >= 70:
                 high_score_matches += 1
     
-    # Stats par statut
+    # Stats depuis les process
+    processes = await db.process.find({}, {"_id": 0}).to_list(1000)
     statuts_count = {}
     total_honoraires = 0
-    for candidat in candidats:
-        statut = candidat.get('statut', 'NOUVEAU')
+    candidats_places = 0
+    
+    for proc in processes:
+        statut = proc.get('statut', 'ENCV')
         statuts_count[statut] = statuts_count.get(statut, 0) + 1
-        if statut == 'PCLT' and candidat.get('honoraire'):
-            total_honoraires += candidat['honoraire']
+        if statut == 'PCLT':
+            candidats_places += 1
+            if proc.get('honoraire'):
+                total_honoraires += proc['honoraire']
     
     return {
         "total_candidats": total_candidats,
@@ -641,13 +646,23 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         "high_score_matches": high_score_matches,
         "statuts_count": statuts_count,
         "total_honoraires": total_honoraires,
-        "candidats_places": statuts_count.get('PCLT', 0)
+        "candidats_places": candidats_places,
+        "total_process": len(processes)
     }
 
 @api_router.get("/stats/sources")
 async def get_sources_stats(current_user: dict = Depends(get_current_user)):
     """Statistiques par source de candidat"""
     candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
+    processes = await db.process.find({}, {"_id": 0}).to_list(1000)
+    
+    # Créer un index des process par candidat_id
+    process_by_candidat = {}
+    for proc in processes:
+        cid = proc['candidat_id']
+        if cid not in process_by_candidat:
+            process_by_candidat[cid] = []
+        process_by_candidat[cid].append(proc)
     
     sources_stats = {}
     for source in SOURCES_CANDIDAT:
@@ -666,10 +681,14 @@ async def get_sources_stats(current_user: dict = Depends(get_current_user)):
             source = "Non renseigné"
         
         sources_stats[source]["total"] += 1
-        if candidat.get('statut') == 'PCLT':
-            sources_stats[source]["places"] += 1
-            if candidat.get('honoraire'):
-                sources_stats[source]["honoraires"] += candidat['honoraire']
+        
+        # Vérifier les process de ce candidat
+        candidat_processes = process_by_candidat.get(candidat['id'], [])
+        for proc in candidat_processes:
+            if proc.get('statut') == 'PCLT':
+                sources_stats[source]["places"] += 1
+                if proc.get('honoraire'):
+                    sources_stats[source]["honoraires"] += proc['honoraire']
     
     # Convertir en liste triée par honoraires
     result = [
