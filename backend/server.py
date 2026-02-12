@@ -1374,6 +1374,8 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                 col_map['titre_poste'] = col_map.get('titre_poste', i)
             elif 'ville' in h or 'lieu' in h or 'localisation' in h:
                 col_map['ville'] = i
+            elif 'code' in h and 'postal' in h or h == 'cp' or h == 'code postal':
+                col_map['code_postal'] = i
             elif 'convention' in h:
                 col_map['convention_signee'] = i
             elif 'contact' in h and 'email' not in h and 'mail' not in h:
@@ -1401,6 +1403,7 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                 
                 contact = str(row[col_map.get('contact')] or '').strip() if col_map.get('contact') is not None else ''
                 email_contact = str(row[col_map.get('email_contact')] or '').strip() if col_map.get('email_contact') is not None else ''
+                code_postal = str(row[col_map.get('code_postal')] or '').strip() if col_map.get('code_postal') is not None else ''
                 
                 # Créer le poste
                 poste_doc = {
@@ -1408,6 +1411,7 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                     "entreprise": entreprise,
                     "titre_poste": titre_poste or "Non renseigné",
                     "ville": ville or "Non renseigné",
+                    "code_postal": code_postal or None,
                     "convention_signee": convention_signee,
                     "contact": contact or None,
                     "email_contact": email_contact or None,
