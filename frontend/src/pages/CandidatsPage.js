@@ -409,14 +409,22 @@ export default function CandidatsPage() {
                     const totalProcesses = getProcessCount(candidat.id);
                     
                     return (
-                      <TableRow key={candidat.id} data-testid={`candidat-row-${candidat.id}`}>
+                      <TableRow key={candidat.id} data-testid={`candidat-row-${candidat.id}`} className={candidat.is_archived ? 'opacity-60' : ''}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                            <div className={`h-10 w-10 rounded-full flex items-center justify-center font-medium ${candidat.is_archived ? 'bg-gray-200 text-gray-500' : 'bg-primary/10 text-primary'}`}>
                               {candidat.prenom.charAt(0)}{candidat.nom.charAt(0)}
                             </div>
                             <div>
-                              <p className="font-medium">{candidat.prenom} {candidat.nom}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{candidat.prenom} {candidat.nom}</p>
+                                {candidat.is_archived && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Archive className="h-3 w-3 mr-1" />
+                                    Archivé
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">
                                 {candidat.disponibilite && `Dispo: ${candidat.disponibilite}`}
                                 {candidat.remuneration && ` • ${candidat.remuneration}`}
@@ -468,6 +476,19 @@ export default function CandidatsPage() {
                               <DropdownMenuItem onClick={() => openEditModal(candidat)}>
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleToggleArchive(candidat)}>
+                                {candidat.is_archived ? (
+                                  <>
+                                    <ArchiveRestore className="h-4 w-4 mr-2" />
+                                    Restaurer
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="h-4 w-4 mr-2" />
+                                    Archiver
+                                  </>
+                                )}
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => handleDelete(candidat.id)}
