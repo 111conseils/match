@@ -66,20 +66,20 @@ export default function DashboardPage() {
       link: '/postes'
     },
     {
-      title: 'Matchs totaux',
-      value: stats.total_matches,
-      icon: Zap,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-      link: '/matching'
-    },
-    {
-      title: 'Matchs +70%',
-      value: stats.high_score_matches,
+      title: 'Placés',
+      value: stats.candidats_places || 0,
       icon: TrendingUp,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      link: '/matching'
+      link: '/candidats'
+    },
+    {
+      title: 'Honoraires',
+      value: `${(stats.total_honoraires || 0).toLocaleString('fr-FR')}€`,
+      icon: TrendingUp,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+      link: '/sources'
     }
   ];
 
