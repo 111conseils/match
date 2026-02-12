@@ -169,6 +169,22 @@ export default function CandidatsPage() {
     }
   };
 
+  const handleToggleArchive = async (candidat) => {
+    const newStatus = !candidat.is_archived;
+    try {
+      await axios.put(
+        `${API_URL}/api/candidats/${candidat.id}`,
+        { is_archived: newStatus },
+        { headers: getAuthHeaders() }
+      );
+      toast.success(newStatus ? 'Candidat archivé' : 'Candidat restauré');
+      fetchData();
+    } catch (error) {
+      console.error('Error toggling archive:', error);
+      toast.error('Erreur lors de l\'archivage');
+    }
+  };
+
   const getProcessCount = (candidatId) => {
     return processMap[candidatId]?.length || 0;
   };
