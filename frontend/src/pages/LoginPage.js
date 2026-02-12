@@ -141,17 +141,8 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
-              <button
-                type="button"
-                onClick={() => setIsLogin(!isLogin)}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                data-testid="toggle-auth-mode"
-              >
-                {isLogin 
-                  ? "Pas encore de compte ? S'inscrire" 
-                  : 'Déjà un compte ? Se connecter'}
-              </button>
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              Application privée - 111 conseils
             </div>
           </CardContent>
         </Card>
