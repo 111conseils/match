@@ -39,6 +39,7 @@ export default function MatchingPage() {
   const [matchesForPoste, setMatchesForPoste] = useState([]);
   const [matchesForCandidat, setMatchesForCandidat] = useState([]);
   const [existingProcesses, setExistingProcesses] = useState([]);
+  const [rejectedMatches, setRejectedMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [activeTab, setActiveTab] = useState('postes');
