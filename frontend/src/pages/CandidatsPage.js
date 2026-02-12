@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight, Download } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight, Download, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -198,6 +198,42 @@ export default function CandidatsPage() {
     }
   };
 
+  const handleImport = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${API_URL}/api/import/candidats`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        toast.success(`${result.imported} candidat(s) importé(s) !`);
+        if (result.errors?.length > 0) {
+          toast.warning(`${result.errors.length} erreur(s) lors de l'import`);
+        }
+        fetchData();
+      } else {
+        toast.error(result.detail || 'Erreur lors de l\'import');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error('Erreur lors de l\'import');
+    }
+    
+    // Reset input
+    event.target.value = '';
+  };
+
   const filteredCandidats = candidats.filter(c => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
@@ -234,11 +270,26 @@ export default function CandidatsPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExport} data-testid="export-candidats-btn">
             <Download className="h-4 w-4 mr-2" />
-            Export Excel
+            Export
           </Button>
+          <label className="cursor-pointer">
+            <Button variant="outline" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Import Excel
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              className="hidden"
+              data-testid="import-candidats-input"
+            />
+          </label>
           <Button onClick={openCreateModal} data-testid="add-candidat-btn">
             <Plus className="h-4 w-4 mr-2" />
-            Ajouter un candidat
+            Ajouter
           </Button>
         </div>
       </div>
