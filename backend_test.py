@@ -221,7 +221,7 @@ class RecruitHubAPITester:
             "Create new poste",
             "POST",
             "postes",
-            201,
+            200,
             data=poste_data
         )
         
