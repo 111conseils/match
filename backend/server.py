@@ -916,6 +916,55 @@ async def get_all_matches(current_user: dict = Depends(get_current_user)):
     
     return all_matches
 
+# ============ REJECTED MATCHES ROUTES ============
+
+@api_router.post("/rejected-matches")
+async def reject_match(data: RejectedMatchCreate, current_user: dict = Depends(get_current_user)):
+    """Rejette un match candidat-poste (action croix du Tinder)"""
+    # Vérifier que le candidat et le poste existent
+    candidat = await db.candidats.find_one({"id": data.candidat_id}, {"_id": 0})
+    if not candidat:
+        raise HTTPException(status_code=404, detail="Candidat non trouvé")
+    
+    poste = await db.postes.find_one({"id": data.poste_id}, {"_id": 0})
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste non trouvé")
+    
+    # Vérifier que ce match n'est pas déjà rejeté
+    existing = await db.rejected_matches.find_one({
+        "candidat_id": data.candidat_id,
+        "poste_id": data.poste_id
+    }, {"_id": 0})
+    if existing:
+        return {"message": "Match déjà rejeté", "id": existing['id']}
+    
+    rejected_match = RejectedMatch(
+        candidat_id=data.candidat_id,
+        poste_id=data.poste_id
+    )
+    doc = rejected_match.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.rejected_matches.insert_one(doc)
+    
+    return {"message": "Match rejeté", "id": rejected_match.id}
+
+@api_router.delete("/rejected-matches/{candidat_id}/{poste_id}")
+async def restore_match(candidat_id: str, poste_id: str, current_user: dict = Depends(get_current_user)):
+    """Restaure un match précédemment rejeté"""
+    result = await db.rejected_matches.delete_one({
+        "candidat_id": candidat_id,
+        "poste_id": poste_id
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Match rejeté non trouvé")
+    return {"message": "Match restauré"}
+
+@api_router.get("/rejected-matches")
+async def get_rejected_matches(current_user: dict = Depends(get_current_user)):
+    """Récupère tous les matchs rejetés"""
+    rejected = await db.rejected_matches.find({}, {"_id": 0}).to_list(1000)
+    return rejected
+
 # ============ STATS ROUTES ============
 
 @api_router.get("/stats")
