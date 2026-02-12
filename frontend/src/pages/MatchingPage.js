@@ -54,20 +54,24 @@ export default function MatchingPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [postesRes, candidatsRes, processRes] = await Promise.all([
+        const [postesRes, candidatsRes, processRes, rejectedRes] = await Promise.all([
           axios.get(`${API_URL}/api/postes`, { headers: getAuthHeaders() }),
           axios.get(`${API_URL}/api/candidats`, { headers: getAuthHeaders() }),
-          axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() })
+          axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() }),
+          axios.get(`${API_URL}/api/rejected-matches`, { headers: getAuthHeaders() })
         ]);
         setPostes(postesRes.data);
-        setCandidats(candidatsRes.data);
+        // Filtrer les candidats archivés
+        setCandidats(candidatsRes.data.filter(c => !c.is_archived));
         setExistingProcesses(processRes.data);
+        setRejectedMatches(rejectedRes.data);
         
         if (postesRes.data.length > 0) {
           setSelectedPoste(postesRes.data[0]);
         }
-        if (candidatsRes.data.length > 0) {
-          setSelectedCandidat(candidatsRes.data[0]);
+        const activeCandidats = candidatsRes.data.filter(c => !c.is_archived);
+        if (activeCandidats.length > 0) {
+          setSelectedCandidat(activeCandidats[0]);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
