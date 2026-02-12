@@ -72,8 +72,6 @@ class CandidatCreate(BaseModel):
     titre_poste: str
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
-    statut: str = "NOUVEAU"
-    honoraire: Optional[float] = None
     source: Optional[str] = None
 
 class CandidatUpdate(BaseModel):
@@ -84,8 +82,6 @@ class CandidatUpdate(BaseModel):
     titre_poste: Optional[str] = None
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
-    statut: Optional[str] = None
-    honoraire: Optional[float] = None
     source: Optional[str] = None
 
 class Candidat(BaseModel):
@@ -98,10 +94,32 @@ class Candidat(BaseModel):
     titre_poste: str
     remuneration: Optional[str] = None
     disponibilite: Optional[str] = None
-    statut: str = "NOUVEAU"
-    honoraire: Optional[float] = None
     source: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Process Models (suivi candidat-poste)
+class ProcessCreate(BaseModel):
+    candidat_id: str
+    poste_id: str
+    statut: str = "ENCV"
+    honoraire: Optional[float] = None
+    notes: Optional[str] = None
+
+class ProcessUpdate(BaseModel):
+    statut: Optional[str] = None
+    honoraire: Optional[float] = None
+    notes: Optional[str] = None
+
+class Process(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    candidat_id: str
+    poste_id: str
+    statut: str = "ENCV"
+    honoraire: Optional[float] = None
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Poste Models
 class PosteCreate(BaseModel):
