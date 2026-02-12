@@ -1,34 +1,98 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* App specific styles */
+.sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-all duration-200;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.sidebar-link:hover {
+    @apply bg-secondary;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.sidebar-link.active {
+    @apply bg-primary text-primary-foreground;
 }
 
-.App-link {
-    color: #61dafb;
+.stat-card {
+    @apply bg-card border border-border rounded-lg p-6 transition-all duration-200;
 }
 
-@keyframes App-logo-spin {
+.stat-card:hover {
+    @apply shadow-md;
+}
+
+.data-table {
+    @apply w-full border-collapse;
+}
+
+.data-table th {
+    @apply text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground py-3 px-4 border-b border-border;
+}
+
+.data-table td {
+    @apply py-4 px-4 border-b border-border text-sm;
+}
+
+.data-table tr:hover td {
+    @apply bg-secondary/50;
+}
+
+.score-badge {
+    @apply inline-flex items-center justify-center min-w-[48px] h-8 px-3 rounded-full text-sm font-bold text-white;
+}
+
+.score-badge.high {
+    @apply match-score-high;
+}
+
+.score-badge.medium {
+    @apply match-score-medium;
+}
+
+.score-badge.low {
+    @apply bg-muted text-muted-foreground;
+}
+
+.match-indicator {
+    @apply inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium;
+}
+
+.match-indicator.success {
+    @apply bg-green-100 text-green-700;
+}
+
+.match-indicator.muted {
+    @apply bg-gray-100 text-gray-500;
+}
+
+/* Login page split */
+.login-left-panel {
+    @apply hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12;
+}
+
+.login-right-panel {
+    @apply w-full lg:w-1/2 flex items-center justify-center p-8 bg-background;
+}
+
+/* Modal animations */
+.modal-enter {
+    animation: modalEnter 0.2s ease-out;
+}
+
+@keyframes modalEnter {
     from {
-        transform: rotate(0deg);
+        opacity: 0;
+        transform: scale(0.95);
     }
     to {
-        transform: rotate(360deg);
+        opacity: 1;
+        transform: scale(1);
     }
+}
+
+/* Card hover effect */
+.hover-lift {
+    @apply transition-transform duration-200;
+}
+
+.hover-lift:hover {
+    @apply -translate-y-1;
 }
