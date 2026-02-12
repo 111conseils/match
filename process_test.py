@@ -10,7 +10,7 @@ from datetime import datetime
 import json
 
 class ProcessAPITester:
-    def __init__(self, base_url="https://recruit-hub-95.preview.emergentagent.com"):
+    def __init__(self, base_url="https://candidate-job-hub.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
