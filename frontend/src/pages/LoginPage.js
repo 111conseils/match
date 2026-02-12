@@ -40,7 +40,7 @@ export default function LoginPage() {
       <div className="login-left-panel">
         <div className="max-w-md text-white">
           <h1 className="text-4xl font-bold font-heading mb-4 tracking-tight">
-            111 conseils
+            111MATCHING
           </h1>
           <p className="text-lg text-white/80 mb-8">
             Simplifiez votre recrutement avec un matching intelligent entre candidats et postes.
@@ -85,7 +85,7 @@ export default function LoginPage() {
         <Card className="w-full max-w-md border-border shadow-sm">
           <CardHeader className="space-y-1">
             <div className="lg:hidden mb-4">
-              <h1 className="text-2xl font-bold font-heading text-primary">111 conseils</h1>
+              <h1 className="text-2xl font-bold font-heading text-primary">111MATCHING</h1>
             </div>
             <CardTitle className="text-2xl font-heading">
               {isLogin ? 'Connexion' : 'Créer un compte'}
