@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, ArrowRight, Euro, Building, User } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, ArrowRight, Euro, Building, User, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -200,6 +200,30 @@ export default function ProcessPage() {
     .filter(p => p.statut === 'PCLT' && p.honoraire)
     .reduce((sum, p) => sum + p.honoraire, 0);
 
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/export/process`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `process_${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Export téléchargé !');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Erreur lors de l\'export');
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 lg:p-8 flex items-center justify-center min-h-[60vh]">
@@ -220,10 +244,16 @@ export default function ProcessPage() {
             {totalProcess} process • {placesCount} placés • {totalHonoraires.toLocaleString('fr-FR')}€ d'honoraires
           </p>
         </div>
-        <Button onClick={openCreateModal} data-testid="add-process-btn">
-          <Plus className="h-4 w-4 mr-2" />
-          Nouveau process
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} data-testid="export-process-btn">
+            <Download className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button onClick={openCreateModal} data-testid="add-process-btn">
+            <Plus className="h-4 w-4 mr-2" />
+            Nouveau process
+          </Button>
+        </div>
       </div>
 
       {/* Search & Filters */}
