@@ -1253,6 +1253,8 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                 col_map['ville'] = i
             elif 'département' in h or 'departement' in h or 'dept' in h:
                 col_map['departement'] = i
+            elif 'code' in h and 'postal' in h or h == 'cp' or h == 'code postal':
+                col_map['code_postal'] = i
             elif 'rayon' in h or 'km' in h:
                 col_map['rayon_km'] = i
             elif 'rémunération' in h or 'remuneration' in h or 'salaire' in h or h == 'rem':
@@ -1303,6 +1305,8 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                 if not ville and col_map.get('departement') is not None and len(row) > col_map.get('departement'):
                     ville = str(row[col_map.get('departement')] or '').strip()
                 
+                code_postal = str(row[col_map.get('code_postal')] or '').strip() if col_map.get('code_postal') is not None and len(row) > col_map.get('code_postal') else ''
+                
                 rayon_km = 30
                 if col_map.get('rayon_km') is not None and len(row) > col_map.get('rayon_km') and row[col_map.get('rayon_km')]:
                     try:
@@ -1322,6 +1326,7 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                     "nom": nom,
                     "titre_poste": titre_poste or "Non renseigné",
                     "ville": ville or "Non renseigné",
+                    "code_postal": code_postal or None,
                     "rayon_km": rayon_km,
                     "remuneration": remuneration or None,
                     "disponibilite": disponibilite or None,
