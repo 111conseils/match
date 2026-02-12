@@ -22,7 +22,7 @@ import {
 } from '../components/ui/dropdown-menu';
 import { Switch } from '../components/ui/switch';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download, Upload } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download, Upload, Mail, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -31,7 +31,9 @@ const initialFormState = {
   entreprise: '',
   titre_poste: '',
   ville: '',
-  convention_signee: false
+  convention_signee: false,
+  contact: '',
+  email_contact: ''
 };
 
 export default function PostesPage() {
@@ -76,7 +78,9 @@ export default function PostesPage() {
       entreprise: poste.entreprise,
       titre_poste: poste.titre_poste,
       ville: poste.ville,
-      convention_signee: poste.convention_signee || false
+      convention_signee: poste.convention_signee || false,
+      contact: poste.contact || '',
+      email_contact: poste.email_contact || ''
     });
     setIsEditing(true);
     setCurrentPoste(poste);
@@ -332,6 +336,7 @@ export default function PostesPage() {
                     <TableHead>Entreprise</TableHead>
                     <TableHead>Poste</TableHead>
                     <TableHead>Localisation</TableHead>
+                    <TableHead>Contact</TableHead>
                     <TableHead>Convention</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -367,6 +372,24 @@ export default function PostesPage() {
                           <MapPin className="h-4 w-4" />
                           <span>{poste.ville}</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {poste.contact || poste.email_contact ? (
+                          <div className="text-sm">
+                            {poste.contact && <p className="font-medium">{poste.contact}</p>}
+                            {poste.email_contact && (
+                              <a 
+                                href={`mailto:${poste.email_contact}`} 
+                                className="text-blue-600 hover:underline flex items-center gap-1"
+                              >
+                                <Mail className="h-3 w-3" />
+                                {poste.email_contact}
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <button
@@ -462,6 +485,30 @@ export default function PostesPage() {
                   required
                   data-testid="poste-ville-input"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contact">Nom du contact</Label>
+                  <Input
+                    id="contact"
+                    value={formData.contact}
+                    onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                    placeholder="Ex: Marie Dupont"
+                    data-testid="poste-contact-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email_contact">Email du contact</Label>
+                  <Input
+                    id="email_contact"
+                    type="email"
+                    value={formData.email_contact}
+                    onChange={(e) => setFormData({ ...formData, email_contact: e.target.value })}
+                    placeholder="Ex: contact@entreprise.fr"
+                    data-testid="poste-email-input"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-lg border border-border">
