@@ -1088,6 +1088,10 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                 col_map['ville'] = i
             elif 'convention' in h:
                 col_map['convention_signee'] = i
+            elif 'contact' in h and 'email' not in h and 'mail' not in h:
+                col_map['contact'] = i
+            elif 'email' in h or 'mail' in h:
+                col_map['email_contact'] = i
         
         imported = 0
         errors = []
