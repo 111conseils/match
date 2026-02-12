@@ -394,7 +394,105 @@ async def delete_candidat(candidat_id: str, current_user: dict = Depends(get_cur
     result = await db.candidats.delete_one({"id": candidat_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Candidat non trouvé")
+    # Supprimer aussi les process associés
+    await db.process.delete_many({"candidat_id": candidat_id})
     return {"message": "Candidat supprimé"}
+
+# ============ PROCESS ROUTES ============
+
+@api_router.get("/process", response_model=List[dict])
+async def get_all_process(current_user: dict = Depends(get_current_user)):
+    """Récupère tous les process avec les infos candidat et poste"""
+    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(1000)
+    
+    result = []
+    for proc in processes:
+        candidat = await db.candidats.find_one({"id": proc['candidat_id']}, {"_id": 0})
+        poste = await db.postes.find_one({"id": proc['poste_id']}, {"_id": 0})
+        if candidat and poste:
+            result.append({
+                **proc,
+                "candidat": candidat,
+                "poste": poste
+            })
+    return result
+
+@api_router.get("/process/candidat/{candidat_id}")
+async def get_process_by_candidat(candidat_id: str, current_user: dict = Depends(get_current_user)):
+    """Récupère tous les process d'un candidat"""
+    processes = await db.process.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(100)
+    
+    result = []
+    for proc in processes:
+        poste = await db.postes.find_one({"id": proc['poste_id']}, {"_id": 0})
+        if poste:
+            result.append({**proc, "poste": poste})
+    return result
+
+@api_router.get("/process/poste/{poste_id}")
+async def get_process_by_poste(poste_id: str, current_user: dict = Depends(get_current_user)):
+    """Récupère tous les process d'un poste"""
+    processes = await db.process.find({"poste_id": poste_id}, {"_id": 0}).to_list(100)
+    
+    result = []
+    for proc in processes:
+        candidat = await db.candidats.find_one({"id": proc['candidat_id']}, {"_id": 0})
+        if candidat:
+            result.append({**proc, "candidat": candidat})
+    return result
+
+@api_router.post("/process", response_model=Process)
+async def create_process(process: ProcessCreate, current_user: dict = Depends(get_current_user)):
+    # Vérifier que le candidat et le poste existent
+    candidat = await db.candidats.find_one({"id": process.candidat_id}, {"_id": 0})
+    if not candidat:
+        raise HTTPException(status_code=404, detail="Candidat non trouvé")
+    
+    poste = await db.postes.find_one({"id": process.poste_id}, {"_id": 0})
+    if not poste:
+        raise HTTPException(status_code=404, detail="Poste non trouvé")
+    
+    # Vérifier qu'un process n'existe pas déjà pour ce couple
+    existing = await db.process.find_one({
+        "candidat_id": process.candidat_id,
+        "poste_id": process.poste_id
+    }, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Un process existe déjà pour ce candidat et ce poste")
+    
+    process_obj = Process(**process.model_dump())
+    doc = process_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    doc['updated_at'] = doc['updated_at'].isoformat()
+    await db.process.insert_one(doc)
+    return process_obj
+
+@api_router.put("/process/{process_id}", response_model=dict)
+async def update_process(process_id: str, process: ProcessUpdate, current_user: dict = Depends(get_current_user)):
+    existing = await db.process.find_one({"id": process_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Process non trouvé")
+    
+    update_data = {k: v for k, v in process.model_dump().items() if v is not None}
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    if update_data:
+        await db.process.update_one({"id": process_id}, {"$set": update_data})
+    
+    updated = await db.process.find_one({"id": process_id}, {"_id": 0})
+    
+    # Récupérer les infos candidat et poste
+    candidat = await db.candidats.find_one({"id": updated['candidat_id']}, {"_id": 0})
+    poste = await db.postes.find_one({"id": updated['poste_id']}, {"_id": 0})
+    
+    return {**updated, "candidat": candidat, "poste": poste}
+
+@api_router.delete("/process/{process_id}")
+async def delete_process(process_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.process.delete_one({"id": process_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Process non trouvé")
+    return {"message": "Process supprimé"}
 
 # ============ POSTES ROUTES ============
 
