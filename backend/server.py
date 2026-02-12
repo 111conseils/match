@@ -818,10 +818,20 @@ async def get_matches_for_poste(poste_id: str, current_user: dict = Depends(get_
     if not poste:
         raise HTTPException(status_code=404, detail="Poste non trouvé")
     
-    candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
+    # Exclure les candidats archivés
+    candidats = await db.candidats.find({"is_archived": {"$ne": True}}, {"_id": 0}).to_list(1000)
+    
+    # Récupérer les matchs rejetés pour ce poste
+    rejected = await db.rejected_matches.find({"poste_id": poste_id}, {"_id": 0}).to_list(1000)
+    rejected_candidat_ids = {r['candidat_id'] for r in rejected}
+    
     matches = []
     
     for candidat in candidats:
+        # Exclure les matchs rejetés
+        if candidat['id'] in rejected_candidat_ids:
+            continue
+            
         match_result = await calculate_match_score_async(candidat, poste)
         if match_result['score'] > 0:
             if isinstance(candidat.get('created_at'), str):
@@ -829,6 +839,41 @@ async def get_matches_for_poste(poste_id: str, current_user: dict = Depends(get_
             matches.append(Match(
                 candidat=Candidat(**candidat),
                 poste_id=poste_id,
+                score=match_result['score'],
+                titre_match=match_result['titre_match'],
+                zone_match=match_result['zone_match']
+            ))
+    
+    # Sort by score descending
+    matches.sort(key=lambda x: x.score, reverse=True)
+    return matches
+
+@api_router.get("/matching/candidat/{candidat_id}", response_model=List[MatchFromCandidat])
+async def get_matches_for_candidat(candidat_id: str, current_user: dict = Depends(get_current_user)):
+    """Récupère tous les postes compatibles pour un candidat donné"""
+    candidat = await db.candidats.find_one({"id": candidat_id}, {"_id": 0})
+    if not candidat:
+        raise HTTPException(status_code=404, detail="Candidat non trouvé")
+    
+    postes = await db.postes.find({}, {"_id": 0}).to_list(1000)
+    
+    # Récupérer les matchs rejetés pour ce candidat
+    rejected = await db.rejected_matches.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(1000)
+    rejected_poste_ids = {r['poste_id'] for r in rejected}
+    
+    matches = []
+    
+    for poste in postes:
+        # Exclure les matchs rejetés
+        if poste['id'] in rejected_poste_ids:
+            continue
+            
+        match_result = await calculate_match_score_async(candidat, poste)
+        if match_result['score'] > 0:
+            if isinstance(poste.get('created_at'), str):
+                poste['created_at'] = datetime.fromisoformat(poste['created_at'])
+            matches.append(MatchFromCandidat(
+                poste=poste,
                 score=match_result['score'],
                 titre_match=match_result['titre_match'],
                 zone_match=match_result['zone_match']
