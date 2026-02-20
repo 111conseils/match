@@ -546,14 +546,15 @@ async def calculate_match_score_async(candidat: dict, poste: dict) -> dict:
     poste_coords = await get_city_coords_async(poste['ville'], poste.get('code_postal'))
     
     if candidat_coords and poste_coords:
-        distance = calculate_distance_km(candidat_coords, poste_coords)
+        distance_km = calculate_distance_km(candidat_coords, poste_coords)
         rayon = candidat.get('rayon_km', 30)
         
-        if distance <= rayon:
+        if distance_km <= rayon:
+            # Si dans le rayon = match parfait sur la zone (50 points)
             zone_match = True
-            zone_score = max(0, 50 * (1 - distance / rayon))
-            score += zone_score
+            score += 50
     elif candidat['ville'].lower().strip() == poste['ville'].lower().strip():
+        # Même nom de ville = match parfait
         score += 50
         zone_match = True
     
