@@ -510,16 +510,14 @@ def calculate_match_score(candidat: dict, poste: dict) -> dict:
     
     if candidat_coords and poste_coords:
         distance = calculate_distance_km(candidat_coords, poste_coords)
-        rayon = candidat['rayon_km']
+        rayon = candidat.get('rayon_km', 30)
         
         if distance <= rayon:
-            # Full score if within radius
+            # Si dans le rayon = match parfait sur la zone (50 points)
             zone_match = True
-            # Score decreases linearly with distance
-            zone_score = max(0, 50 * (1 - distance / rayon))
-            score += zone_score
+            score += 50
     elif candidat['ville'].lower().strip() == poste['ville'].lower().strip():
-        # Same city name
+        # Même nom de ville = match parfait
         score += 50
         zone_match = True
     
