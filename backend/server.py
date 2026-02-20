@@ -534,6 +534,7 @@ async def calculate_match_score_async(candidat: dict, poste: dict) -> dict:
     score = 0
     titre_match = False
     zone_match = False
+    distance_km = None
     
     # Title matching (50% weight)
     if titles_match(candidat['titre_poste'], poste['titre_poste']):
