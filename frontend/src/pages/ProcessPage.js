@@ -6,14 +6,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '../components/ui/table';
+import { ScrollArea } from '../components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Badge } from '../components/ui/badge';
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -28,18 +23,18 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, ArrowRight, Euro, Building, User, Download } from 'lucide-react';
+import { Search, MoreHorizontal, Pencil, Trash2, ArrowRight, Euro, Building, User, Download, Briefcase, MapPin, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const STATUTS = [
-  { code: "ENCV", label: "Envoyé au client", color: "bg-blue-100 text-blue-700" },
-  { code: "ENTC", label: "Entretien client", color: "bg-purple-100 text-purple-700" },
-  { code: "PROPALE", label: "Sous proposition", color: "bg-orange-100 text-orange-700" },
-  { code: "PCLT", label: "Placé", color: "bg-green-100 text-green-700" },
-  { code: "REFUS", label: "Refus propale", color: "bg-red-100 text-red-700" },
-  { code: "NOGO_DISPO", label: "Plus disponible", color: "bg-gray-200 text-gray-600" }
+  { code: "ENCV", label: "Envoyé au client", color: "bg-blue-100 text-blue-700", dotColor: "bg-blue-500" },
+  { code: "ENTC", label: "Entretien client", color: "bg-purple-100 text-purple-700", dotColor: "bg-purple-500" },
+  { code: "PROPALE", label: "Sous proposition", color: "bg-orange-100 text-orange-700", dotColor: "bg-orange-500" },
+  { code: "PCLT", label: "Placé", color: "bg-green-100 text-green-700", dotColor: "bg-green-500" },
+  { code: "REFUS", label: "Refus", color: "bg-red-100 text-red-700", dotColor: "bg-red-500" },
+  { code: "NOGO_DISPO", label: "NOGO", color: "bg-gray-200 text-gray-600", dotColor: "bg-gray-500" }
 ];
 
 export default function ProcessPage() {
@@ -50,12 +45,14 @@ export default function ProcessPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatut, setFilterStatut] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('candidats');
+  const [selectedCandidat, setSelectedCandidat] = useState(null);
+  const [selectedPoste, setSelectedPoste] = useState(null);
+  
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [currentProcess, setCurrentProcess] = useState(null);
   const [formData, setFormData] = useState({
-    candidat_id: '',
-    poste_id: '',
     statut: 'ENCV',
     honoraire: '',
     notes: ''
@@ -70,8 +67,16 @@ export default function ProcessPage() {
         axios.get(`${API_URL}/api/postes`, { headers: getAuthHeaders() })
       ]);
       setProcesses(processRes.data);
-      setCandidats(candidatsRes.data);
+      setCandidats(candidatsRes.data.filter(c => !c.is_archived));
       setPostes(postesRes.data);
+      
+      // Sélectionner le premier candidat/poste par défaut
+      if (candidatsRes.data.length > 0 && !selectedCandidat) {
+        setSelectedCandidat(candidatsRes.data.filter(c => !c.is_archived)[0]);
+      }
+      if (postesRes.data.length > 0 && !selectedPoste) {
+        setSelectedPoste(postesRes.data[0]);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Erreur lors du chargement des données');
@@ -84,63 +89,37 @@ export default function ProcessPage() {
     fetchData();
   }, []);
 
-  const openCreateModal = () => {
-    setFormData({
-      candidat_id: '',
-      poste_id: '',
-      statut: 'ENCV',
-      honoraire: '',
-      notes: ''
-    });
-    setIsEditing(false);
-    setCurrentProcess(null);
-    setIsModalOpen(true);
-  };
-
   const openEditModal = (proc) => {
     setFormData({
-      candidat_id: proc.candidat_id,
-      poste_id: proc.poste_id,
       statut: proc.statut,
       honoraire: proc.honoraire || '',
       notes: proc.notes || ''
     });
-    setIsEditing(true);
     setCurrentProcess(proc);
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!currentProcess) return;
+    
     setSubmitting(true);
-
-    const dataToSend = {
-      ...formData,
-      honoraire: formData.honoraire ? parseFloat(formData.honoraire) : null
-    };
-
     try {
-      if (isEditing && currentProcess) {
-        await axios.put(
-          `${API_URL}/api/process/${currentProcess.id}`,
-          { statut: dataToSend.statut, honoraire: dataToSend.honoraire, notes: dataToSend.notes },
-          { headers: getAuthHeaders() }
-        );
-        toast.success('Process mis à jour');
-      } else {
-        await axios.post(
-          `${API_URL}/api/process`,
-          dataToSend,
-          { headers: getAuthHeaders() }
-        );
-        toast.success('Process créé');
-      }
+      await axios.put(
+        `${API_URL}/api/process/${currentProcess.id}`,
+        { 
+          statut: formData.statut, 
+          honoraire: formData.honoraire ? parseFloat(formData.honoraire) : null, 
+          notes: formData.notes || null 
+        },
+        { headers: getAuthHeaders() }
+      );
+      toast.success('Process mis à jour');
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
       console.error('Error saving process:', error);
-      const message = error.response?.data?.detail || 'Erreur lors de l\'enregistrement';
-      toast.error(message);
+      toast.error('Erreur lors de la mise à jour');
     } finally {
       setSubmitting(false);
     }
@@ -175,39 +154,15 @@ export default function ProcessPage() {
   };
 
   const getStatutBadge = (statut) => {
-    const s = STATUTS.find(st => st.code === statut) || STATUTS[0];
-    return s;
+    return STATUTS.find(st => st.code === statut) || STATUTS[0];
   };
-
-  const filteredProcesses = processes.filter(p => {
-    const query = searchQuery.toLowerCase();
-    const candidat = p.candidat;
-    const poste = p.poste;
-    const matchesSearch = (
-      (candidat?.nom?.toLowerCase().includes(query)) ||
-      (candidat?.prenom?.toLowerCase().includes(query)) ||
-      (poste?.entreprise?.toLowerCase().includes(query)) ||
-      (poste?.titre_poste?.toLowerCase().includes(query))
-    );
-    const matchesStatut = filterStatut === 'ALL' || p.statut === filterStatut;
-    return matchesSearch && matchesStatut;
-  });
-
-  // Calculer les stats
-  const totalProcess = processes.length;
-  const placesCount = processes.filter(p => p.statut === 'PCLT').length;
-  const totalHonoraires = processes
-    .filter(p => p.statut === 'PCLT' && p.honoraire)
-    .reduce((sum, p) => sum + p.honoraire, 0);
 
   const handleExport = async () => {
     try {
       const response = await fetch(`${API_URL}/api/export/process`, {
         headers: getAuthHeaders()
       });
-      
       if (!response.ok) throw new Error('Export failed');
-      
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -219,10 +174,35 @@ export default function ProcessPage() {
       document.body.removeChild(a);
       toast.success('Export téléchargé !');
     } catch (error) {
-      console.error('Export error:', error);
       toast.error('Erreur lors de l\'export');
     }
   };
+
+  // Grouper les process par candidat
+  const getProcessesByCandidat = (candidatId) => {
+    return processes.filter(p => p.candidat_id === candidatId);
+  };
+
+  // Grouper les process par poste
+  const getProcessesByPoste = (posteId) => {
+    return processes.filter(p => p.poste_id === posteId);
+  };
+
+  // Filtrer les candidats qui ont au moins un process
+  const candidatsWithProcess = candidats.filter(c => 
+    processes.some(p => p.candidat_id === c.id)
+  );
+
+  // Filtrer les postes qui ont au moins un process
+  const postesWithProcess = postes.filter(p => 
+    processes.some(proc => proc.poste_id === p.id)
+  );
+
+  // Stats
+  const totalProcess = processes.length;
+  const encvCount = processes.filter(p => p.statut === 'ENCV').length;
+  const entcCount = processes.filter(p => p.statut === 'ENTC').length;
+  const placesCount = processes.filter(p => p.statut === 'PCLT').length;
 
   if (loading) {
     return (
@@ -240,284 +220,467 @@ export default function ProcessPage() {
           <h1 className="text-3xl font-bold font-heading text-primary tracking-tight">
             Suivi des Process
           </h1>
-          <p className="text-muted-foreground mt-1">
-            {totalProcess} process • {placesCount} placés • {totalHonoraires.toLocaleString('fr-FR')}€ d'honoraires
-          </p>
+          <div className="flex flex-wrap gap-3 mt-2">
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              {encvCount} envoyés
+            </Badge>
+            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+              {entcCount} en entretien
+            </Badge>
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              {placesCount} placés
+            </Badge>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} data-testid="export-process-btn">
-            <Download className="h-4 w-4 mr-2" />
-            Export Excel
-          </Button>
-          <Button onClick={openCreateModal} data-testid="add-process-btn">
-            <Plus className="h-4 w-4 mr-2" />
-            Nouveau process
-          </Button>
-        </div>
+        <Button variant="outline" onClick={handleExport} data-testid="export-process-btn">
+          <Download className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
       </div>
 
-      {/* Search & Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher par candidat ou entreprise..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-                data-testid="search-process-input"
-              />
-            </div>
-            <Select value={filterStatut} onValueChange={setFilterStatut}>
-              <SelectTrigger className="w-full sm:w-[200px]" data-testid="filter-statut">
-                <SelectValue placeholder="Filtrer par statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous les statuts</SelectItem>
-                {STATUTS.map(s => (
-                  <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="candidats" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Par Candidat
+          </TabsTrigger>
+          <TabsTrigger value="postes" className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4" />
+            Par Poste
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          {filteredProcesses.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <ArrowRight className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">Aucun process trouvé</p>
-              <p className="text-sm">
-                {searchQuery || filterStatut !== 'ALL' 
-                  ? 'Essayez une autre recherche' 
-                  : 'Créez un process depuis la page Matching'}
-              </p>
-            </div>
+        {/* Vue par Candidat */}
+        <TabsContent value="candidats" className="mt-6">
+          {candidatsWithProcess.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <User className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Aucun process en cours</p>
+                <p className="text-sm">Créez des process depuis la page Matching</p>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Candidat</TableHead>
-                    <TableHead className="text-center">
-                      <ArrowRight className="h-4 w-4 mx-auto" />
-                    </TableHead>
-                    <TableHead>Poste / Entreprise</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Honoraire</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProcesses.map((proc) => {
-                    const statutInfo = getStatutBadge(proc.statut);
-                    return (
-                      <TableRow key={proc.id} data-testid={`process-row-${proc.id}`}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-medium">
-                              {proc.candidat?.prenom?.charAt(0)}{proc.candidat?.nom?.charAt(0)}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Liste des candidats */}
+              <Card className="lg:col-span-1">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-heading flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Candidats ({candidatsWithProcess.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[500px]">
+                    <div className="p-2 space-y-1">
+                      {candidatsWithProcess.map((candidat) => {
+                        const candidatProcesses = getProcessesByCandidat(candidat.id);
+                        const activeCount = candidatProcesses.filter(p => !['PCLT', 'REFUS', 'NOGO_DISPO'].includes(p.statut)).length;
+                        
+                        return (
+                          <button
+                            key={candidat.id}
+                            onClick={() => setSelectedCandidat(candidat)}
+                            className={`w-full text-left p-4 rounded-lg border transition-all ${
+                              selectedCandidat?.id === candidat.id
+                                ? 'border-primary bg-primary/5'
+                                : 'border-transparent hover:bg-secondary'
+                            }`}
+                            data-testid={`select-candidat-process-${candidat.id}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                  {candidat.prenom?.charAt(0)}{candidat.nom?.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-medium">{candidat.prenom} {candidat.nom}</p>
+                                  <p className="text-xs text-muted-foreground">{candidat.titre_poste}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge variant="secondary" className="text-xs">
+                                  {candidatProcesses.length} envoi{candidatProcesses.length > 1 ? 's' : ''}
+                                </Badge>
+                                {activeCount > 0 && (
+                                  <span className="text-xs text-blue-600">{activeCount} actif{activeCount > 1 ? 's' : ''}</span>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{proc.candidat?.prenom} {proc.candidat?.nom}</p>
-                              <p className="text-xs text-muted-foreground">{proc.candidat?.titre_poste}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Détails des envois du candidat */}
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-heading flex items-center gap-2">
+                    <Building className="h-5 w-5" />
+                    Envois de {selectedCandidat?.prenom} {selectedCandidat?.nom}
+                  </CardTitle>
+                  {selectedCandidat && (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedCandidat.titre_poste} • {selectedCandidat.ville}
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {selectedCandidat && getProcessesByCandidat(selectedCandidat.id).length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground">
+                      <p>Aucun envoi pour ce candidat</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedCandidat && getProcessesByCandidat(selectedCandidat.id).map((proc) => {
+                        const statutInfo = getStatutBadge(proc.statut);
+                        return (
+                          <div
+                            key={proc.id}
+                            className="p-4 rounded-lg border bg-card hover:shadow-sm transition-all"
+                            data-testid={`process-item-${proc.id}`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 flex-1">
+                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                                  proc.poste?.convention_signee ? 'bg-green-100' : 'bg-orange-100'
+                                }`}>
+                                  <Building className={`h-5 w-5 ${
+                                    proc.poste?.convention_signee ? 'text-green-600' : 'text-orange-600'
+                                  }`} />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold">{proc.poste?.entreprise}</p>
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                    <p className="text-muted-foreground">{proc.poste?.titre_poste}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">{proc.poste?.ville}</span>
+                                    {proc.poste?.contact && (
+                                      <>
+                                        <span className="text-muted-foreground">•</span>
+                                        <span className="text-xs text-muted-foreground">{proc.poste?.contact}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {proc.notes && (
+                                    <p className="text-sm text-muted-foreground mt-2 italic">"{proc.notes}"</p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${statutInfo.color} cursor-pointer hover:opacity-80 transition-opacity`}>
+                                      {statutInfo.label}
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {STATUTS.map(s => (
+                                      <DropdownMenuItem 
+                                        key={s.code} 
+                                        onClick={() => updateStatut(proc, s.code)}
+                                        className={proc.statut === s.code ? 'bg-secondary' : ''}
+                                      >
+                                        <span className={`w-2 h-2 rounded-full mr-2 ${s.dotColor}`}></span>
+                                        {s.label}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openEditModal(proc)}>
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Modifier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDelete(proc.id)}
+                                      className="text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Supprimer
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <ArrowRight className="h-4 w-4 text-muted-foreground mx-auto" />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-green-50 flex items-center justify-center">
-                              <Building className="h-5 w-5 text-green-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium">{proc.poste?.titre_poste}</p>
-                              <p className="text-xs text-muted-foreground">{proc.poste?.entreprise} • {proc.poste?.ville}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className={`px-2 py-1 rounded-full text-xs font-medium ${statutInfo.color} cursor-pointer hover:opacity-80`}>
-                                {statutInfo.label}
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              {STATUTS.map(s => (
-                                <DropdownMenuItem 
-                                  key={s.code} 
-                                  onClick={() => updateStatut(proc, s.code)}
-                                  className={proc.statut === s.code ? 'bg-secondary' : ''}
-                                >
-                                  <span className={`w-2 h-2 rounded-full mr-2 ${s.color.split(' ')[0]}`}></span>
-                                  {s.label}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                        <TableCell>
-                          {proc.statut === 'PCLT' && proc.honoraire ? (
-                            <div className="flex items-center gap-1 text-green-600 font-medium">
-                              <Euro className="h-4 w-4" />
-                              {proc.honoraire.toLocaleString('fr-FR')}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-muted-foreground truncate max-w-[150px] block">
-                            {proc.notes || '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" data-testid={`process-actions-${proc.id}`}>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openEditModal(proc)}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Modifier
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDelete(proc.id)}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Supprimer
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
 
-      {/* Modal */}
+        {/* Vue par Poste */}
+        <TabsContent value="postes" className="mt-6">
+          {postesWithProcess.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Briefcase className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Aucun process en cours</p>
+                <p className="text-sm">Créez des process depuis la page Matching</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Liste des postes */}
+              <Card className="lg:col-span-1">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-heading flex items-center gap-2">
+                    <Briefcase className="h-5 w-5" />
+                    Postes ({postesWithProcess.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[500px]">
+                    <div className="p-2 space-y-1">
+                      {postesWithProcess.map((poste) => {
+                        const posteProcesses = getProcessesByPoste(poste.id);
+                        const activeCount = posteProcesses.filter(p => !['PCLT', 'REFUS', 'NOGO_DISPO'].includes(p.statut)).length;
+                        
+                        return (
+                          <button
+                            key={poste.id}
+                            onClick={() => setSelectedPoste(poste)}
+                            className={`w-full text-left p-4 rounded-lg border transition-all ${
+                              selectedPoste?.id === poste.id
+                                ? 'border-primary bg-primary/5'
+                                : 'border-transparent hover:bg-secondary'
+                            }`}
+                            data-testid={`select-poste-process-${poste.id}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                                  poste.convention_signee ? 'bg-green-100' : 'bg-orange-100'
+                                }`}>
+                                  <Building className={`h-5 w-5 ${
+                                    poste.convention_signee ? 'text-green-600' : 'text-orange-600'
+                                  }`} />
+                                </div>
+                                <div>
+                                  <p className="font-medium">{poste.titre_poste}</p>
+                                  <p className="text-xs text-muted-foreground">{poste.entreprise} • {poste.ville}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge variant="secondary" className="text-xs">
+                                  {posteProcesses.length} candidat{posteProcesses.length > 1 ? 's' : ''}
+                                </Badge>
+                                {activeCount > 0 && (
+                                  <span className="text-xs text-blue-600">{activeCount} actif{activeCount > 1 ? 's' : ''}</span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Détails des candidats pour le poste */}
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-heading flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Candidats envoyés pour {selectedPoste?.titre_poste}
+                  </CardTitle>
+                  {selectedPoste && (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedPoste.entreprise} • {selectedPoste.ville}
+                      {selectedPoste.contact && ` • Contact: ${selectedPoste.contact}`}
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {selectedPoste && getProcessesByPoste(selectedPoste.id).length === 0 ? (
+                    <div className="py-8 text-center text-muted-foreground">
+                      <p>Aucun candidat envoyé pour ce poste</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedPoste && getProcessesByPoste(selectedPoste.id).map((proc) => {
+                        const statutInfo = getStatutBadge(proc.statut);
+                        return (
+                          <div
+                            key={proc.id}
+                            className="p-4 rounded-lg border bg-card hover:shadow-sm transition-all"
+                            data-testid={`process-poste-item-${proc.id}`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 flex-1">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                                  {proc.candidat?.prenom?.charAt(0)}{proc.candidat?.nom?.charAt(0)}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-semibold">{proc.candidat?.prenom} {proc.candidat?.nom}</p>
+                                  <p className="text-sm text-muted-foreground">{proc.candidat?.titre_poste}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                      {proc.candidat?.ville} ({proc.candidat?.rayon_km}km)
+                                    </span>
+                                    {proc.candidat?.disponibilite && (
+                                      <>
+                                        <span className="text-muted-foreground">•</span>
+                                        <span className="text-xs text-muted-foreground">Dispo: {proc.candidat?.disponibilite}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {proc.notes && (
+                                    <p className="text-sm text-muted-foreground mt-2 italic">"{proc.notes}"</p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${statutInfo.color} cursor-pointer hover:opacity-80 transition-opacity`}>
+                                      {statutInfo.label}
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {STATUTS.map(s => (
+                                      <DropdownMenuItem 
+                                        key={s.code} 
+                                        onClick={() => updateStatut(proc, s.code)}
+                                        className={proc.statut === s.code ? 'bg-secondary' : ''}
+                                      >
+                                        <span className={`w-2 h-2 rounded-full mr-2 ${s.dotColor}`}></span>
+                                        {s.label}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openEditModal(proc)}>
+                                      <Pencil className="h-4 w-4 mr-2" />
+                                      Modifier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDelete(proc.id)}
+                                      className="text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Supprimer
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Modal de modification */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="font-heading">
-              {isEditing ? 'Modifier le process' : 'Nouveau process'}
-            </DialogTitle>
+            <DialogTitle className="font-heading">Modifier le process</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              {!isEditing && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="candidat">Candidat</Label>
-                    <Select 
-                      value={formData.candidat_id} 
-                      onValueChange={(value) => setFormData({ ...formData, candidat_id: value })}
-                    >
-                      <SelectTrigger data-testid="process-candidat-select">
-                        <SelectValue placeholder="Sélectionner un candidat" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {candidats.map(c => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.prenom} {c.nom} - {c.titre_poste}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="poste">Poste</Label>
-                    <Select 
-                      value={formData.poste_id} 
-                      onValueChange={(value) => setFormData({ ...formData, poste_id: value })}
-                    >
-                      <SelectTrigger data-testid="process-poste-select">
-                        <SelectValue placeholder="Sélectionner un poste" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {postes.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.titre_poste} - {p.entreprise} ({p.ville})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
+          {currentProcess && (
+            <form onSubmit={handleSubmit}>
+              <div className="py-4 space-y-4">
+                {/* Résumé du process */}
+                <div className="p-3 rounded-lg bg-secondary/50 text-sm">
+                  <p><strong>{currentProcess.candidat?.prenom} {currentProcess.candidat?.nom}</strong></p>
+                  <p className="text-muted-foreground">→ {currentProcess.poste?.entreprise} ({currentProcess.poste?.titre_poste})</p>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="statut">Statut</Label>
-                <Select 
-                  value={formData.statut} 
-                  onValueChange={(value) => setFormData({ ...formData, statut: value })}
-                >
-                  <SelectTrigger data-testid="process-statut-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUTS.map(s => (
-                      <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.statut === 'PCLT' && (
                 <div className="space-y-2">
-                  <Label htmlFor="honoraire">Montant honoraire (€)</Label>
-                  <Input
-                    id="honoraire"
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={formData.honoraire}
-                    onChange={(e) => setFormData({ ...formData, honoraire: e.target.value })}
-                    placeholder="Ex: 5000"
-                    data-testid="process-honoraire-input"
+                  <Label htmlFor="statut">Statut</Label>
+                  <Select 
+                    value={formData.statut} 
+                    onValueChange={(value) => setFormData({ ...formData, statut: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUTS.map(s => (
+                        <SelectItem key={s.code} value={s.code}>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${s.dotColor}`}></span>
+                            {s.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.statut === 'PCLT' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="honoraire">Montant honoraire (€)</Label>
+                    <Input
+                      id="honoraire"
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={formData.honoraire}
+                      onChange={(e) => setFormData({ ...formData, honoraire: e.target.value })}
+                      placeholder="Ex: 5000"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder="Notes sur ce process..."
+                    rows={3}
                   />
                 </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Notes sur ce process..."
-                  rows={3}
-                  data-testid="process-notes-input"
-                />
               </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                Annuler
-              </Button>
-              <Button type="submit" disabled={submitting} data-testid="process-submit-btn">
-                {submitting ? 'Enregistrement...' : (isEditing ? 'Mettre à jour' : 'Créer')}
-              </Button>
-            </DialogFooter>
-          </form>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Enregistrement...' : 'Mettre à jour'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
