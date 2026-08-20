@@ -421,3 +421,80 @@ def test_candidat_sans_champ_is_archived_est_considere_actif(api, sync_db, make_
 
     assert len(api.get(f"/api/matching/{poste['id']}").json()) == 1
     assert api.get("/api/stats").json()["total_candidats_actifs"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Arret propre
+#
+# shutdown_db_client() ferme aussi le client Mongo du module : l'appeler dans la
+# session casserait tous les tests suivants. On l'execute donc isolement.
+# --------------------------------------------------------------------------- #
+def test_arret_ferme_le_client_de_geocodage():
+    import subprocess
+    import sys
+    import textwrap
+
+    from conftest import BACKEND_DIR, DB_NAME, MONGO_URL
+
+    script = textwrap.dedent("""
+        import asyncio, os, sys
+        os.environ["MONGO_URL"] = sys.argv[1]
+        os.environ["DB_NAME"] = sys.argv[2]
+        os.environ["JWT_SECRET"] = "secret-de-test-suffisamment-long-pour-etre-accepte-0123456789"
+        sys.path.insert(0, sys.argv[3])
+        import server
+
+        ferme = []
+
+        class FauxClient:
+            is_closed = False
+            async def aclose(self):
+                ferme.append(True)
+                self.is_closed = True
+
+        server._geo_http_client = FauxClient()
+        asyncio.run(server.shutdown_db_client())
+        assert ferme == [True], "le client de geocodage n'a pas ete ferme"
+        print("OK")
+    """)
+
+    proc = subprocess.run(
+        [sys.executable, "-c", script, MONGO_URL, DB_NAME, str(BACKEND_DIR)],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "OK" in proc.stdout
+
+
+def test_arret_supporte_un_client_deja_ferme():
+    """Double arret : ne doit pas lever."""
+    import subprocess
+    import sys
+    import textwrap
+
+    from conftest import BACKEND_DIR, DB_NAME, MONGO_URL
+
+    script = textwrap.dedent("""
+        import asyncio, os, sys
+        os.environ["MONGO_URL"] = sys.argv[1]
+        os.environ["DB_NAME"] = sys.argv[2]
+        os.environ["JWT_SECRET"] = "secret-de-test-suffisamment-long-pour-etre-accepte-0123456789"
+        sys.path.insert(0, sys.argv[3])
+        import server
+
+        class DejaFerme:
+            is_closed = True
+            async def aclose(self):
+                raise AssertionError("ne doit pas etre rappele")
+
+        server._geo_http_client = DejaFerme()
+        asyncio.run(server.shutdown_db_client())
+        print("OK")
+    """)
+
+    proc = subprocess.run(
+        [sys.executable, "-c", script, MONGO_URL, DB_NAME, str(BACKEND_DIR)],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "OK" in proc.stdout
