@@ -16,6 +16,9 @@ import bcrypt
 import math
 import io
 import httpx
+import secrets
+import asyncio
+import unicodedata
 
 # Cache pour les coordonnées des villes (évite de rappeler l'API)
 city_coords_cache = {}
@@ -29,7 +32,40 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'recruithub-secret-key-change-in-production')
+# Secrets connus/publics : on refuse de s'en servir pour signer les tokens.
+INSECURE_JWT_SECRETS = {
+    'recruithub-secret-key-change-in-production',
+    'changeme', 'secret', 'change-me', 'your-secret-key',
+}
+
+
+def _load_or_create_jwt_secret() -> str:
+    """Retourne le JWT_SECRET, ou en genere un et le persiste dans .env s'il est absent/devinable."""
+    secret = (os.environ.get('JWT_SECRET') or '').strip()
+    if secret and secret not in INSECURE_JWT_SECRETS and len(secret) >= 32:
+        return secret
+
+    new_secret = secrets.token_urlsafe(48)
+    env_path = ROOT_DIR / '.env'
+    try:
+        existing = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []
+        kept = [line for line in existing if not line.startswith('JWT_SECRET=')]
+        kept.append(f'JWT_SECRET={new_secret}')
+        env_path.write_text('\n'.join(kept) + '\n', encoding='utf-8')
+        logging.warning(
+            "JWT_SECRET absent ou non securise : un nouveau secret a ete genere et ecrit dans %s. "
+            "Les sessions ouvertes sont invalidees, il faut se reconnecter.", env_path,
+        )
+    except OSError as exc:
+        logging.error(
+            "Ecriture du JWT_SECRET impossible dans %s (%s). Un secret temporaire est utilise : "
+            "il changera au prochain redemarrage.", env_path, exc,
+        )
+    os.environ['JWT_SECRET'] = new_secret
+    return new_secret
+
+
+JWT_SECRET = _load_or_create_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -399,24 +435,51 @@ FRENCH_CITIES = {
     "royan": (45.6167, -1.0333),
 }
 
+# Un seul client HTTP pour tout le geocodage : ouvrir une connexion par appel
+# coutait plus cher que la requete elle-meme.
+_geo_http_client: Optional[httpx.AsyncClient] = None
+_geo_client_lock = asyncio.Lock()
+_geo_semaphore = asyncio.Semaphore(10)
+
+# Cache negatif : evite de re-interroger l'API pour une ville qui vient d'echouer.
+# Duree courte pour qu'une panne passagere de l'API se resorbe toute seule.
+GEO_NEGATIVE_TTL_SECONDS = 600
+_geo_failures: dict = {}
+
+
+async def get_geo_http_client() -> httpx.AsyncClient:
+    global _geo_http_client
+    if _geo_http_client is None or _geo_http_client.is_closed:
+        async with _geo_client_lock:
+            if _geo_http_client is None or _geo_http_client.is_closed:
+                _geo_http_client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(5.0, connect=3.0),
+                    limits=httpx.Limits(max_connections=10, max_keepalive_connections=10),
+                )
+    return _geo_http_client
+
+
 async def get_city_coords_from_api(city_name: str, code_postal: str = None) -> Optional[tuple]:
-    """Récupère les coordonnées d'une ville via l'API Adresse du gouvernement"""
+    """Recupere les coordonnees d'une ville via l'API Adresse du gouvernement"""
     try:
         query = f"{city_name} {code_postal}" if code_postal else city_name
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(
+        http_client = await get_geo_http_client()
+        async with _geo_semaphore:
+            response = await http_client.get(
                 "https://api-adresse.data.gouv.fr/search/",
-                params={"q": query, "type": "municipality", "limit": 1}
+                params={"q": query, "type": "municipality", "limit": 1},
             )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("features") and len(data["features"]) > 0:
-                    coords = data["features"][0]["geometry"]["coordinates"]
-                    # L'API retourne [longitude, latitude], on inverse
-                    return (coords[1], coords[0])
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("features") and len(data["features"]) > 0:
+                coords = data["features"][0]["geometry"]["coordinates"]
+                # L'API retourne [longitude, latitude], on inverse
+                return (coords[1], coords[0])
     except Exception as e:
-        logging.warning(f"Erreur géocodage {city_name}: {e}")
+        logging.warning(f"Erreur geocodage {city_name}: {e}")
     return None
+
+
 
 def get_city_coords(city_name: str) -> Optional[tuple]:
     """Get coordinates for a city name - version synchrone pour compatibilité"""
@@ -440,31 +503,104 @@ def get_city_coords(city_name: str) -> Optional[tuple]:
 async def get_city_coords_async(city_name: str, code_postal: str = None) -> Optional[tuple]:
     """Get coordinates for a city name - version asynchrone avec API"""
     cache_key = f"{city_name.lower().strip()}_{code_postal or ''}"
-    
-    # Vérifier le cache d'abord
+
+    # Verifier le cache d'abord
     if cache_key in city_coords_cache:
         return city_coords_cache[cache_key]
-    
+
     normalized = city_name.lower().strip()
-    
-    # Vérifier dans la liste locale
+
+    # Verifier dans la liste locale
     if normalized in FRENCH_CITIES:
         city_coords_cache[cache_key] = FRENCH_CITIES[normalized]
         return FRENCH_CITIES[normalized]
-    
+
     # Try partial match dans la liste locale
     for city, coords in FRENCH_CITIES.items():
         if normalized in city or city in normalized:
             city_coords_cache[cache_key] = coords
             return coords
-    
-    # Appeler l'API pour les villes non trouvées
+
+    # Ville en echec recemment : inutile de rappeler l'API a chaque paire candidat/poste
+    failed_at = _geo_failures.get(cache_key)
+    if failed_at is not None:
+        if (datetime.now(timezone.utc) - failed_at).total_seconds() < GEO_NEGATIVE_TTL_SECONDS:
+            return None
+        _geo_failures.pop(cache_key, None)
+
+    # Appeler l'API pour les villes non trouvees
     coords = await get_city_coords_from_api(city_name, code_postal)
     if coords:
         city_coords_cache[cache_key] = coords
+        _geo_failures.pop(cache_key, None)
         return coords
-    
+
+    _geo_failures[cache_key] = datetime.now(timezone.utc)
     return None
+
+
+async def preload_city_coords(*collections) -> int:
+    """Geocode en une passe toutes les villes distinctes.
+
+    Sans ca, /matching declenche jusqu'a 2 appels reseau par paire candidat/poste.
+    Retourne le nombre de villes restees non resolues (geocodage indisponible).
+    """
+    pending = {}
+    for docs in collections:
+        for doc in docs:
+            ville = (doc.get('ville') or '').strip()
+            if not ville:
+                continue
+            code_postal = doc.get('code_postal')
+            cache_key = f"{ville.lower().strip()}_{code_postal or ''}"
+            if cache_key not in city_coords_cache:
+                pending[cache_key] = (ville, code_postal)
+
+    if not pending:
+        return 0
+
+    # Cache persistant : survit aux redemarrages, contrairement au dict en memoire
+    try:
+        cached = await db.geo_cache.find({"_id": {"$in": list(pending)}}).to_list(None)
+        for doc in cached:
+            if doc.get('lat') is not None and doc.get('lon') is not None:
+                city_coords_cache[doc['_id']] = (doc['lat'], doc['lon'])
+                pending.pop(doc['_id'], None)
+    except Exception as e:
+        logging.warning(f"Lecture du cache geo impossible: {e}")
+
+    if not pending:
+        return 0
+
+    items = list(pending.items())
+    results = await asyncio.gather(
+        *(get_city_coords_async(ville, code_postal) for _, (ville, code_postal) in items),
+        return_exceptions=True,
+    )
+
+    to_persist = []
+    unresolved = []
+    for (cache_key, (ville, _)), coords in zip(items, results):
+        if isinstance(coords, tuple):
+            to_persist.append({"_id": cache_key, "lat": coords[0], "lon": coords[1]})
+        else:
+            unresolved.append(ville)
+
+    if to_persist:
+        try:
+            await db.geo_cache.insert_many(to_persist, ordered=False)
+        except Exception as e:
+            logging.warning(f"Cache geo non persiste: {e}")
+
+    if unresolved:
+        logging.warning(
+            "Geocodage indisponible pour %d ville(s) : %s. "
+            "Les matchs concernes sont incomplets tant que l'API Adresse ne repond pas.",
+            len(unresolved), ", ".join(sorted(set(unresolved))[:10]),
+        )
+    return len(unresolved)
+
+
 
 def calculate_distance_km(coord1: tuple, coord2: tuple) -> float:
     """Calculate distance between two coordinates using Haversine formula"""
@@ -481,6 +617,16 @@ def calculate_distance_km(coord1: tuple, coord2: tuple) -> float:
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     
     return R * c
+
+def normalize_key(*parts) -> str:
+    """Cle de deduplication : minuscules, sans accents, espaces normalises."""
+    cleaned = []
+    for part in parts:
+        text = unicodedata.normalize('NFKD', str(part or '').strip().lower())
+        text = ''.join(c for c in text if not unicodedata.combining(c))
+        cleaned.append(' '.join(text.split()))
+    return '|'.join(cleaned)
+
 
 def normalize_title(title: str) -> str:
     """Normalize job title for comparison"""
@@ -618,7 +764,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/candidats", response_model=List[Candidat])
 async def get_candidats(current_user: dict = Depends(get_current_user)):
-    candidats = await db.candidats.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    candidats = await db.candidats.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
     for c in candidats:
         if isinstance(c.get('created_at'), str):
             c['created_at'] = datetime.fromisoformat(c['created_at'])
@@ -669,13 +815,27 @@ async def delete_candidat(candidat_id: str, current_user: dict = Depends(get_cur
 
 @api_router.get("/process", response_model=List[dict])
 async def get_all_process(current_user: dict = Depends(get_current_user)):
-    """Récupère tous les process avec les infos candidat et poste"""
-    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(1000)
-    
+    """Recupere tous les process avec les infos candidat et poste"""
+    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(None)
+    if not processes:
+        return []
+
+    # 2 requetes au total au lieu de 2 par process
+    candidat_ids = list({p['candidat_id'] for p in processes})
+    poste_ids = list({p['poste_id'] for p in processes})
+    candidats = {
+        c['id']: c
+        for c in await db.candidats.find({"id": {"$in": candidat_ids}}, {"_id": 0}).to_list(None)
+    }
+    postes = {
+        p['id']: p
+        for p in await db.postes.find({"id": {"$in": poste_ids}}, {"_id": 0}).to_list(None)
+    }
+
     result = []
     for proc in processes:
-        candidat = await db.candidats.find_one({"id": proc['candidat_id']}, {"_id": 0})
-        poste = await db.postes.find_one({"id": proc['poste_id']}, {"_id": 0})
+        candidat = candidats.get(proc['candidat_id'])
+        poste = postes.get(proc['poste_id'])
         if candidat and poste:
             result.append({
                 **proc,
@@ -684,29 +844,51 @@ async def get_all_process(current_user: dict = Depends(get_current_user)):
             })
     return result
 
+
+
 @api_router.get("/process/candidat/{candidat_id}")
 async def get_process_by_candidat(candidat_id: str, current_user: dict = Depends(get_current_user)):
-    """Récupère tous les process d'un candidat"""
-    processes = await db.process.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(100)
-    
+    """Recupere tous les process d'un candidat"""
+    processes = await db.process.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(None)
+    if not processes:
+        return []
+
+    poste_ids = list({p['poste_id'] for p in processes})
+    postes = {
+        p['id']: p
+        for p in await db.postes.find({"id": {"$in": poste_ids}}, {"_id": 0}).to_list(None)
+    }
+
     result = []
     for proc in processes:
-        poste = await db.postes.find_one({"id": proc['poste_id']}, {"_id": 0})
+        poste = postes.get(proc['poste_id'])
         if poste:
             result.append({**proc, "poste": poste})
     return result
 
+
+
 @api_router.get("/process/poste/{poste_id}")
 async def get_process_by_poste(poste_id: str, current_user: dict = Depends(get_current_user)):
-    """Récupère tous les process d'un poste"""
-    processes = await db.process.find({"poste_id": poste_id}, {"_id": 0}).to_list(100)
-    
+    """Recupere tous les process d'un poste"""
+    processes = await db.process.find({"poste_id": poste_id}, {"_id": 0}).to_list(None)
+    if not processes:
+        return []
+
+    candidat_ids = list({p['candidat_id'] for p in processes})
+    candidats = {
+        c['id']: c
+        for c in await db.candidats.find({"id": {"$in": candidat_ids}}, {"_id": 0}).to_list(None)
+    }
+
     result = []
     for proc in processes:
-        candidat = await db.candidats.find_one({"id": proc['candidat_id']}, {"_id": 0})
+        candidat = candidats.get(proc['candidat_id'])
         if candidat:
             result.append({**proc, "candidat": candidat})
     return result
+
+
 
 @api_router.post("/process", response_model=Process)
 async def create_process(process: ProcessCreate, current_user: dict = Depends(get_current_user)):
@@ -765,7 +947,7 @@ async def delete_process(process_id: str, current_user: dict = Depends(get_curre
 
 @api_router.get("/postes", response_model=List[Poste])
 async def get_postes(current_user: dict = Depends(get_current_user)):
-    postes = await db.postes.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    postes = await db.postes.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
     for p in postes:
         if isinstance(p.get('created_at'), str):
             p['created_at'] = datetime.fromisoformat(p['created_at'])
@@ -819,12 +1001,15 @@ async def get_matches_for_poste(poste_id: str, current_user: dict = Depends(get_
         raise HTTPException(status_code=404, detail="Poste non trouvé")
     
     # Exclure les candidats archivés
-    candidats = await db.candidats.find({"is_archived": {"$ne": True}}, {"_id": 0}).to_list(1000)
+    candidats = await db.candidats.find({"is_archived": {"$ne": True}}, {"_id": 0}).to_list(None)
     
     # Récupérer les matchs rejetés pour ce poste
-    rejected = await db.rejected_matches.find({"poste_id": poste_id}, {"_id": 0}).to_list(1000)
+    rejected = await db.rejected_matches.find({"poste_id": poste_id}, {"_id": 0}).to_list(None)
     rejected_candidat_ids = {r['candidat_id'] for r in rejected}
     
+    # Geocode toutes les villes en une passe (au lieu d'un appel API par candidat)
+    await preload_city_coords(candidats, [poste])
+
     matches = []
     
     for candidat in candidats:
@@ -855,12 +1040,15 @@ async def get_matches_for_candidat(candidat_id: str, current_user: dict = Depend
     if not candidat:
         raise HTTPException(status_code=404, detail="Candidat non trouvé")
     
-    postes = await db.postes.find({}, {"_id": 0}).to_list(1000)
+    postes = await db.postes.find({}, {"_id": 0}).to_list(None)
     
     # Récupérer les matchs rejetés pour ce candidat
-    rejected = await db.rejected_matches.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(1000)
+    rejected = await db.rejected_matches.find({"candidat_id": candidat_id}, {"_id": 0}).to_list(None)
     rejected_poste_ids = {r['poste_id'] for r in rejected}
     
+    # Geocode toutes les villes en une passe (au lieu d'un appel API par poste)
+    await preload_city_coords(postes, [candidat])
+
     matches = []
     
     for poste in postes:
@@ -886,16 +1074,27 @@ async def get_matches_for_candidat(candidat_id: str, current_user: dict = Depend
 @api_router.get("/matching", response_model=List[dict])
 async def get_all_matches(current_user: dict = Depends(get_current_user)):
     """Get all matches grouped by poste"""
-    postes = await db.postes.find({}, {"_id": 0}).to_list(1000)
-    candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
-    
+    postes = await db.postes.find({}, {"_id": 0}).to_list(None)
+    # Exclure les candidats archives (coherent avec /matching/{poste_id})
+    candidats = await db.candidats.find({"is_archived": {"$ne": True}}, {"_id": 0}).to_list(None)
+
+    # Exclure les matchs rejetes (croix du Tinder), sinon ils reapparaissent ici
+    rejected = await db.rejected_matches.find({}, {"_id": 0}).to_list(None)
+    rejected_pairs = {(r['candidat_id'], r['poste_id']) for r in rejected}
+
+    # Geocode toutes les villes en une passe avant le produit cartesien
+    await preload_city_coords(postes, candidats)
+
     all_matches = []
     for poste in postes:
         if isinstance(poste.get('created_at'), str):
             poste['created_at'] = datetime.fromisoformat(poste['created_at'])
-        
+
         poste_matches = []
         for candidat in candidats:
+            if (candidat['id'], poste['id']) in rejected_pairs:
+                continue
+
             match_result = await calculate_match_score_async(candidat, poste)
             if match_result['score'] > 0:
                 if isinstance(candidat.get('created_at'), str):
@@ -906,15 +1105,17 @@ async def get_all_matches(current_user: dict = Depends(get_current_user)):
                     'titre_match': match_result['titre_match'],
                     'zone_match': match_result['zone_match']
                 })
-        
+
         poste_matches.sort(key=lambda x: x['score'], reverse=True)
         all_matches.append({
             'poste': poste,
             'matches': poste_matches[:10],  # Top 10 matches per job
             'total_matches': len(poste_matches)
         })
-    
+
     return all_matches
+
+
 
 # ============ REJECTED MATCHES ROUTES ============
 
@@ -962,7 +1163,7 @@ async def restore_match(candidat_id: str, poste_id: str, current_user: dict = De
 @api_router.get("/rejected-matches")
 async def get_rejected_matches(current_user: dict = Depends(get_current_user)):
     """Récupère tous les matchs rejetés"""
-    rejected = await db.rejected_matches.find({}, {"_id": 0}).to_list(1000)
+    rejected = await db.rejected_matches.find({}, {"_id": 0}).to_list(None)
     return rejected
 
 # ============ STATS ROUTES ============
@@ -971,27 +1172,39 @@ async def get_rejected_matches(current_user: dict = Depends(get_current_user)):
 async def get_stats(current_user: dict = Depends(get_current_user)):
     total_candidats = await db.candidats.count_documents({})
     total_postes = await db.postes.count_documents({})
-    
-    # Calculate total matches
-    postes = await db.postes.find({}, {"_id": 0}).to_list(1000)
-    candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
-    
-    total_matches = 0
-    high_score_matches = 0
+    total_candidats_actifs = await db.candidats.count_documents({"is_archived": {"$ne": True}})
+
+    # Matchs : meme moteur que les pages matching (version async + API Adresse),
+    # archives et matchs rejetes exclus, sinon le dashboard annonce d'autres chiffres
+    # que ce que l'utilisateur voit reellement a l'ecran.
+    postes = await db.postes.find({}, {"_id": 0}).to_list(None)
+    candidats = await db.candidats.find({"is_archived": {"$ne": True}}, {"_id": 0}).to_list(None)
+    rejected = await db.rejected_matches.find({}, {"_id": 0}).to_list(None)
+    rejected_pairs = {(r['candidat_id'], r['poste_id']) for r in rejected}
+
+    await preload_city_coords(postes, candidats)
+
+    total_matches = 0    # titre + zone : les seuls matchs affiches dans l'app
+    partial_matches = 0  # titre OU zone seulement
     for poste in postes:
         for candidat in candidats:
-            match_result = calculate_match_score(candidat, poste)
-            if match_result['score'] > 0:
+            if (candidat['id'], poste['id']) in rejected_pairs:
+                continue
+            match_result = await calculate_match_score_async(candidat, poste)
+            if match_result['score'] >= 100:
                 total_matches += 1
-            if match_result['score'] >= 70:
-                high_score_matches += 1
-    
+            elif match_result['score'] > 0:
+                partial_matches += 1
+
+    # Le score ne vaut que 0, 50 ou 100 : un match "fort" est donc un match complet.
+    high_score_matches = total_matches
+
     # Stats depuis les process
-    processes = await db.process.find({}, {"_id": 0}).to_list(1000)
+    processes = await db.process.find({}, {"_id": 0}).to_list(None)
     statuts_count = {}
     total_honoraires = 0
     candidats_places = 0
-    
+
     for proc in processes:
         statut = proc.get('statut', 'ENCV')
         statuts_count[statut] = statuts_count.get(statut, 0) + 1
@@ -999,11 +1212,13 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             candidats_places += 1
             if proc.get('honoraire'):
                 total_honoraires += proc['honoraire']
-    
+
     return {
         "total_candidats": total_candidats,
+        "total_candidats_actifs": total_candidats_actifs,
         "total_postes": total_postes,
         "total_matches": total_matches,
+        "partial_matches": partial_matches,
         "high_score_matches": high_score_matches,
         "statuts_count": statuts_count,
         "total_honoraires": total_honoraires,
@@ -1011,11 +1226,13 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         "total_process": len(processes)
     }
 
+
+
 @api_router.get("/stats/sources")
 async def get_sources_stats(current_user: dict = Depends(get_current_user)):
     """Statistiques par source de candidat"""
-    candidats = await db.candidats.find({}, {"_id": 0}).to_list(1000)
-    processes = await db.process.find({}, {"_id": 0}).to_list(1000)
+    candidats = await db.candidats.find({}, {"_id": 0}).to_list(None)
+    processes = await db.process.find({}, {"_id": 0}).to_list(None)
     
     # Créer un index des process par candidat_id
     process_by_candidat = {}
@@ -1085,8 +1302,8 @@ async def export_candidats_excel(current_user: dict = Depends(get_current_user))
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     
-    candidats = await db.candidats.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    processes = await db.process.find({}, {"_id": 0}).to_list(10000)
+    candidats = await db.candidats.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
+    processes = await db.process.find({}, {"_id": 0}).to_list(None)
     
     # Index des process par candidat
     process_by_candidat = {}
@@ -1168,8 +1385,8 @@ async def export_postes_excel(current_user: dict = Depends(get_current_user)):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     
-    postes = await db.postes.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
-    processes = await db.process.find({}, {"_id": 0}).to_list(10000)
+    postes = await db.postes.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
+    processes = await db.process.find({}, {"_id": 0}).to_list(None)
     
     # Index des process par poste
     process_by_poste = {}
@@ -1256,9 +1473,9 @@ async def export_process_excel(current_user: dict = Depends(get_current_user)):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     
-    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(10000)
-    candidats = {c['id']: c for c in await db.candidats.find({}, {"_id": 0}).to_list(10000)}
-    postes = {p['id']: p for p in await db.postes.find({}, {"_id": 0}).to_list(10000)}
+    processes = await db.process.find({}, {"_id": 0}).sort("updated_at", -1).to_list(None)
+    candidats = {c['id']: c for c in await db.candidats.find({}, {"_id": 0}).to_list(None)}
+    postes = {p['id']: p for p in await db.postes.find({}, {"_id": 0}).to_list(None)}
     
     STATUT_LABELS = {
         "ENCV": "Envoyé au client",
@@ -1382,7 +1599,13 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
             elif 'réf' in h or 'ref' in h:
                 col_map['ref'] = i
         
+        # Index des candidats deja en base : permet de mettre a jour au lieu de dupliquer
+        existing_candidats = {}
+        for doc in await db.candidats.find({}, {"_id": 0, "id": 1, "nom": 1, "prenom": 1}).to_list(None):
+            existing_candidats[normalize_key(doc.get('nom'), doc.get('prenom'))] = doc['id']
+
         imported = 0
+        updated = 0
         errors = []
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
@@ -1428,8 +1651,8 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                     try:
                         val = str(row[col_map.get('rayon_km')]).replace('km', '').replace('KM', '').strip()
                         rayon_km = int(float(val))
-                    except:
-                        pass
+                    except (TypeError, ValueError):
+                        errors.append(f"Ligne {row_idx}: rayon illisible, 30 km applique par defaut")
                 
                 remuneration = str(row[col_map.get('remuneration')] or '').strip() if col_map.get('remuneration') is not None and len(row) > col_map.get('remuneration') else ''
                 disponibilite = str(row[col_map.get('disponibilite')] or '').strip() if col_map.get('disponibilite') is not None and len(row) > col_map.get('disponibilite') else ''
@@ -1447,11 +1670,26 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
                     "remuneration": remuneration or None,
                     "disponibilite": disponibilite or None,
                     "source": source,
+                    "is_archived": False,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 
-                await db.candidats.insert_one(candidat_doc)
-                imported += 1
+                dedup_key = normalize_key(nom, prenom)
+                existing_id = existing_candidats.get(dedup_key)
+                if existing_id:
+                    # Deja present : on met a jour les champs renseignes plutot que de dupliquer
+                    update_fields = {
+                        k: v for k, v in candidat_doc.items()
+                        if k not in ('id', 'created_at', 'is_archived')
+                        and v not in (None, '', 'Non renseigne')
+                    }
+                    if update_fields:
+                        await db.candidats.update_one({"id": existing_id}, {"$set": update_fields})
+                    updated += 1
+                else:
+                    await db.candidats.insert_one(candidat_doc)
+                    existing_candidats[dedup_key] = candidat_doc['id']
+                    imported += 1
                 
             except Exception as e:
                 errors.append(f"Ligne {row_idx}: {str(e)}")
@@ -1459,6 +1697,7 @@ async def import_candidats_excel(file: UploadFile = File(...), current_user: dic
         return {
             "success": True,
             "imported": imported,
+            "updated": updated,
             "errors": errors[:10]  # Max 10 erreurs
         }
         
@@ -1499,7 +1738,16 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
             elif 'email' in h or 'mail' in h:
                 col_map['email_contact'] = i
         
+        # Index des postes deja en base : permet de mettre a jour au lieu de dupliquer
+        existing_postes = {}
+        for doc in await db.postes.find(
+            {}, {"_id": 0, "id": 1, "entreprise": 1, "titre_poste": 1, "ville": 1}
+        ).to_list(None):
+            key = normalize_key(doc.get('entreprise'), doc.get('titre_poste'), doc.get('ville'))
+            existing_postes[key] = doc['id']
+
         imported = 0
+        updated = 0
         errors = []
         
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
@@ -1534,8 +1782,21 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 
-                await db.postes.insert_one(poste_doc)
-                imported += 1
+                dedup_key = normalize_key(entreprise, titre_poste or "Non renseigne", ville or "Non renseigne")
+                existing_id = existing_postes.get(dedup_key)
+                if existing_id:
+                    # Deja present : on met a jour les champs renseignes plutot que de dupliquer
+                    update_fields = {
+                        k: v for k, v in poste_doc.items()
+                        if k not in ('id', 'created_at') and v not in (None, '', 'Non renseigne')
+                    }
+                    if update_fields:
+                        await db.postes.update_one({"id": existing_id}, {"$set": update_fields})
+                    updated += 1
+                else:
+                    await db.postes.insert_one(poste_doc)
+                    existing_postes[dedup_key] = poste_doc['id']
+                    imported += 1
                 
             except Exception as e:
                 errors.append(f"Ligne {row_idx}: {str(e)}")
@@ -1543,6 +1804,7 @@ async def import_postes_excel(file: UploadFile = File(...), current_user: dict =
         return {
             "success": True,
             "imported": imported,
+            "updated": updated,
             "errors": errors[:10]
         }
         
@@ -1566,6 +1828,39 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def create_indexes():
+    """Sans ces index, chaque lecture fait un scan complet de collection.
+
+    Les recherches se font sur le champ applicatif `id` (UUID), pas sur `_id`.
+    """
+    index_specs = [
+        (db.users, [("email", 1)], {"unique": True, "name": "uniq_email"}),
+        (db.candidats, [("id", 1)], {"unique": True, "name": "uniq_id"}),
+        (db.candidats, [("is_archived", 1), ("created_at", -1)], {"name": "archived_created"}),
+        (db.postes, [("id", 1)], {"unique": True, "name": "uniq_id"}),
+        (db.postes, [("created_at", -1)], {"name": "created"}),
+        (db.process, [("id", 1)], {"unique": True, "name": "uniq_id"}),
+        (db.process, [("candidat_id", 1), ("poste_id", 1)], {"unique": True, "name": "uniq_candidat_poste"}),
+        (db.process, [("updated_at", -1)], {"name": "updated"}),
+        (db.rejected_matches, [("candidat_id", 1), ("poste_id", 1)], {"unique": True, "name": "uniq_candidat_poste"}),
+        (db.rejected_matches, [("poste_id", 1)], {"name": "poste"}),
+    ]
+    for collection, keys, options in index_specs:
+        try:
+            await collection.create_index(keys, **options)
+        except Exception as e:
+            # Un index unique echoue si des doublons existent deja en base :
+            # on le signale sans empecher le demarrage.
+            logging.warning(
+                "Index %s sur %s non cree (doublons existants ?): %s",
+                options.get("name"), collection.name, e,
+            )
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _geo_http_client
+    if _geo_http_client is not None and not _geo_http_client.is_closed:
+        await _geo_http_client.aclose()
     client.close()
