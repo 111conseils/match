@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
@@ -22,10 +22,14 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
-import { Search, MoreHorizontal, Pencil, Trash2, Download, Briefcase, MapPin, User, Building, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, MoreHorizontal, Pencil, Trash2, Download, Briefcase, MapPin, User, Building, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import TablePagination from '../components/TablePagination';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+// Le backend ne plafonne plus les listes : on pagine côté affichage.
+const PAGE_SIZE = 25;
 
 const STATUTS = [
   { code: "ENCV", label: "Envoyé", color: "bg-blue-100 text-blue-700 border-blue-200", dotColor: "bg-blue-500" },
@@ -37,7 +41,7 @@ const STATUTS = [
 ];
 
 export default function ProcessPage() {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, handleUnauthorized } = useAuth();
   const [processes, setProcesses] = useState([]);
   const [candidats, setCandidats] = useState([]);
   const [postes, setPostes] = useState([]);
@@ -55,8 +59,10 @@ export default function ProcessPage() {
     notes: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [pageCandidats, setPageCandidats] = useState(1);
+  const [pagePostes, setPagePostes] = useState(1);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [processRes, candidatsRes, postesRes] = await Promise.all([
         axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() }),
@@ -74,15 +80,32 @@ export default function ProcessPage() {
       setExpandedItems(expanded);
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast.error('Erreur lors du chargement des données');
+      if (error.response?.status !== 401) {
+        toast.error('Erreur lors du chargement des données');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // Revenir en page 1 quand la recherche change
+  useEffect(() => {
+    setPageCandidats(1);
+    setPagePostes(1);
+  }, [searchQuery]);
+
+  const paginer = (liste, page) => {
+    const totalPages = Math.max(1, Math.ceil(liste.length / PAGE_SIZE));
+    const courante = Math.min(page, totalPages);
+    return {
+      courante,
+      elements: liste.slice((courante - 1) * PAGE_SIZE, courante * PAGE_SIZE)
+    };
+  };
 
   const toggleExpand = (key) => {
     setExpandedItems(prev => ({ ...prev, [key]: !prev[key] }));
@@ -161,6 +184,10 @@ export default function ProcessPage() {
       const response = await fetch(`${API_URL}/api/export/process`, {
         headers: getAuthHeaders()
       });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -173,6 +200,7 @@ export default function ProcessPage() {
       document.body.removeChild(a);
       toast.success('Export téléchargé !');
     } catch (error) {
+      console.error('Export error:', error);
       toast.error('Erreur lors de l\'export');
     }
   };
@@ -219,6 +247,9 @@ export default function ProcessPage() {
     );
     return matchesPoste || matchesCandidat;
   });
+
+  const vueCandidats = paginer(candidatsWithProcess, pageCandidats);
+  const vuePostes = paginer(postesWithProcess, pagePostes);
 
   // Stats
   const encvCount = processes.filter(p => p.statut === 'ENCV').length;
@@ -296,7 +327,7 @@ export default function ProcessPage() {
               </CardContent>
             </Card>
           ) : (
-            candidatsWithProcess.map((candidat) => {
+            vueCandidats.elements.map((candidat) => {
               const candidatProcesses = getProcessesByCandidat(candidat.id);
               const isExpanded = expandedItems[`candidat-${candidat.id}`];
               
@@ -408,6 +439,14 @@ export default function ProcessPage() {
               );
             })
           )}
+          <TablePagination
+            page={vueCandidats.courante}
+            pageSize={PAGE_SIZE}
+            totalItems={candidatsWithProcess.length}
+            onPageChange={setPageCandidats}
+            label="candidat"
+            testId="process-candidats-pagination"
+          />
         </TabsContent>
 
         {/* Vue par Poste - Liste dépliable */}
@@ -421,7 +460,7 @@ export default function ProcessPage() {
               </CardContent>
             </Card>
           ) : (
-            postesWithProcess.map((poste) => {
+            vuePostes.elements.map((poste) => {
               const posteProcesses = getProcessesByPoste(poste.id);
               const isExpanded = expandedItems[`poste-${poste.id}`];
               
@@ -547,6 +586,14 @@ export default function ProcessPage() {
               );
             })
           )}
+          <TablePagination
+            page={vuePostes.courante}
+            pageSize={PAGE_SIZE}
+            totalItems={postesWithProcess.length}
+            onPageChange={setPagePostes}
+            label="poste"
+            testId="process-postes-pagination"
+          />
         </TabsContent>
       </Tabs>
 

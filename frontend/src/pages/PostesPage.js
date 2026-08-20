@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
@@ -22,10 +22,14 @@ import {
 } from '../components/ui/dropdown-menu';
 import { Switch } from '../components/ui/switch';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download, Upload, Mail, User } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, Briefcase, Building, FileCheck, FileX, Download, Upload, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import TablePagination from '../components/TablePagination';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+// Le backend ne plafonne plus les listes : on pagine côté affichage.
+const PAGE_SIZE = 50;
 
 const initialFormState = {
   entreprise: '',
@@ -38,7 +42,7 @@ const initialFormState = {
 };
 
 export default function PostesPage() {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, handleUnauthorized } = useAuth();
   const [postes, setPostes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,8 +52,9 @@ export default function PostesPage() {
   const [currentPoste, setCurrentPoste] = useState(null);
   const [formData, setFormData] = useState(initialFormState);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
 
-  const fetchPostes = async () => {
+  const fetchPostes = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/api/postes`, { 
         headers: getAuthHeaders() 
@@ -57,15 +62,22 @@ export default function PostesPage() {
       setPostes(response.data);
     } catch (error) {
       console.error('Error fetching postes:', error);
-      toast.error('Erreur lors du chargement des postes');
+      if (error.response?.status !== 401) {
+        toast.error('Erreur lors du chargement des postes');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchPostes();
-  }, []);
+  }, [fetchPostes]);
+
+  // Revenir en page 1 quand le filtrage change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, filterConvention]);
 
   const openCreateModal = () => {
     setFormData(initialFormState);
@@ -162,6 +174,13 @@ export default function PostesPage() {
     return matchesSearch && matchesConvention;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredPostes.length / PAGE_SIZE));
+  const pageCourante = Math.min(page, totalPages);
+  const postesAffiches = filteredPostes.slice(
+    (pageCourante - 1) * PAGE_SIZE,
+    pageCourante * PAGE_SIZE
+  );
+
   const signedCount = postes.filter(p => p.convention_signee).length;
   const notSignedCount = postes.filter(p => !p.convention_signee).length;
 
@@ -171,6 +190,10 @@ export default function PostesPage() {
         headers: getAuthHeaders()
       });
       
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!response.ok) throw new Error('Export failed');
       
       const blob = await response.blob();
@@ -199,20 +222,29 @@ export default function PostesPage() {
     try {
       const response = await fetch(`${API_URL}/api/import/postes`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: getAuthHeaders(),
         body: formData
       });
 
       const result = await response.json();
       
       if (response.ok) {
-        toast.success(`${result.imported} poste(s) importé(s) !`);
+        // Le backend déduplique : un poste déjà connu est mis à jour, pas recréé.
+        const ajoutes = result.imported || 0;
+        const majs = result.updated || 0;
+        if (ajoutes && majs) {
+          toast.success(`${ajoutes} poste(s) ajouté(s), ${majs} mis à jour`);
+        } else if (majs) {
+          toast.success(`${majs} poste(s) déjà connu(s) mis à jour`);
+        } else {
+          toast.success(`${ajoutes} poste(s) ajouté(s) !`);
+        }
         if (result.errors?.length > 0) {
-          toast.warning(`${result.errors.length} erreur(s) lors de l'import`);
+          toast.warning(`${result.errors.length} ligne(s) en erreur : ${result.errors[0]}`);
         }
         fetchPostes();
+      } else if (response.status === 401) {
+        handleUnauthorized();
       } else {
         toast.error(result.detail || 'Erreur lors de l\'import');
       }
@@ -344,7 +376,7 @@ export default function PostesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPostes.map((poste) => (
+                  {postesAffiches.map((poste) => (
                     <TableRow 
                       key={poste.id} 
                       data-testid={`poste-row-${poste.id}`}
@@ -439,6 +471,14 @@ export default function PostesPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination
+                page={pageCourante}
+                pageSize={PAGE_SIZE}
+                totalItems={filteredPostes.length}
+                onPageChange={setPage}
+                label="poste"
+                testId="postes-pagination"
+              />
             </div>
           )}
         </CardContent>

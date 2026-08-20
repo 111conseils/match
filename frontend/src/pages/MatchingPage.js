@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Zap, MapPin, CheckCircle2, Briefcase, Users, Building, Plus, ArrowRight, FileCheck, FileX, User, X, Check } from 'lucide-react';
+import { Zap, MapPin, CheckCircle2, Briefcase, Users, Building, ArrowRight, FileCheck, FileX, User, X, Check, Undo2, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -34,6 +34,9 @@ export default function MatchingPage() {
   const { getAuthHeaders } = useAuth();
   const [postes, setPostes] = useState([]);
   const [candidats, setCandidats] = useState([]);
+  // Liste non filtrée : sert à nommer un match rejeté même si le candidat a
+  // été archivé depuis, sinon le panneau afficherait "Candidat supprimé".
+  const [allCandidats, setAllCandidats] = useState([]);
   const [selectedPoste, setSelectedPoste] = useState(null);
   const [selectedCandidat, setSelectedCandidat] = useState(null);
   const [matchesForPoste, setMatchesForPoste] = useState([]);
@@ -45,6 +48,7 @@ export default function MatchingPage() {
   const [activeTab, setActiveTab] = useState('postes');
   
   // Modal state
+  const [showRejected, setShowRejected] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalCandidat, setModalCandidat] = useState(null);
   const [modalPoste, setModalPoste] = useState(null);
@@ -52,15 +56,19 @@ export default function MatchingPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchData = async () => {
       try {
+        const options = { headers: getAuthHeaders(), signal: controller.signal };
         const [postesRes, candidatsRes, processRes, rejectedRes] = await Promise.all([
-          axios.get(`${API_URL}/api/postes`, { headers: getAuthHeaders() }),
-          axios.get(`${API_URL}/api/candidats`, { headers: getAuthHeaders() }),
-          axios.get(`${API_URL}/api/process`, { headers: getAuthHeaders() }),
-          axios.get(`${API_URL}/api/rejected-matches`, { headers: getAuthHeaders() })
+          axios.get(`${API_URL}/api/postes`, options),
+          axios.get(`${API_URL}/api/candidats`, options),
+          axios.get(`${API_URL}/api/process`, options),
+          axios.get(`${API_URL}/api/rejected-matches`, options)
         ]);
         setPostes(postesRes.data);
+        setAllCandidats(candidatsRes.data);
         // Filtrer les candidats archivés
         setCandidats(candidatsRes.data.filter(c => !c.is_archived));
         setExistingProcesses(processRes.data);
@@ -74,18 +82,26 @@ export default function MatchingPage() {
           setSelectedCandidat(activeCandidats[0]);
         }
       } catch (error) {
+        if (axios.isCancel(error) || error.name === 'CanceledError') return;
         console.error('Error fetching data:', error);
-        toast.error('Erreur lors du chargement des données');
+        if (error.response?.status !== 401) {
+          toast.error('Erreur lors du chargement des données');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+    return () => controller.abort();
+  }, [getAuthHeaders]);
 
   // Fetch matches for selected poste
   useEffect(() => {
+    if (activeTab !== 'postes') return undefined;
+
+    const controller = new AbortController();
+
     const fetchMatchesForPoste = async () => {
       if (!selectedPoste) {
         setMatchesForPoste([]);
@@ -96,25 +112,34 @@ export default function MatchingPage() {
       try {
         const response = await axios.get(
           `${API_URL}/api/matching/${selectedPoste.id}`,
-          { headers: getAuthHeaders() }
+          { headers: getAuthHeaders(), signal: controller.signal }
         );
         // Filtrer seulement les matchs à 100%
-        const perfectMatches = response.data.filter(m => m.score === 100);
-        setMatchesForPoste(perfectMatches);
+        setMatchesForPoste(response.data.filter(m => m.score === 100));
       } catch (error) {
+        if (axios.isCancel(error) || error.name === 'CanceledError') return;
         console.error('Error fetching matches:', error);
+        if (error.response?.status !== 401) {
+          toast.error('Impossible de charger les matchs de ce poste');
+        }
+        setMatchesForPoste([]);
       } finally {
         setLoadingMatches(false);
       }
     };
 
-    if (activeTab === 'postes') {
-      fetchMatchesForPoste();
-    }
-  }, [selectedPoste, activeTab]);
+    fetchMatchesForPoste();
+    // Annule la requête en cours : sans ça, changer vite de poste peut afficher
+    // les matchs du poste précédent si sa réponse arrive en dernier.
+    return () => controller.abort();
+  }, [selectedPoste, activeTab, getAuthHeaders]);
 
   // Fetch matches for selected candidat
   useEffect(() => {
+    if (activeTab !== 'candidats') return undefined;
+
+    const controller = new AbortController();
+
     const fetchMatchesForCandidat = async () => {
       if (!selectedCandidat) {
         setMatchesForCandidat([]);
@@ -125,22 +150,25 @@ export default function MatchingPage() {
       try {
         const response = await axios.get(
           `${API_URL}/api/matching/candidat/${selectedCandidat.id}`,
-          { headers: getAuthHeaders() }
+          { headers: getAuthHeaders(), signal: controller.signal }
         );
         // Filtrer seulement les matchs à 100%
-        const perfectMatches = response.data.filter(m => m.score === 100);
-        setMatchesForCandidat(perfectMatches);
+        setMatchesForCandidat(response.data.filter(m => m.score === 100));
       } catch (error) {
+        if (axios.isCancel(error) || error.name === 'CanceledError') return;
         console.error('Error fetching matches for candidat:', error);
+        if (error.response?.status !== 401) {
+          toast.error('Impossible de charger les matchs de ce candidat');
+        }
+        setMatchesForCandidat([]);
       } finally {
         setLoadingMatches(false);
       }
     };
 
-    if (activeTab === 'candidats') {
-      fetchMatchesForCandidat();
-    }
-  }, [selectedCandidat, activeTab]);
+    fetchMatchesForCandidat();
+    return () => controller.abort();
+  }, [selectedCandidat, activeTab, getAuthHeaders]);
 
   const getExistingProcess = (candidatId, posteId) => {
     return existingProcesses.find(p => p.candidat_id === candidatId && p.poste_id === posteId);
@@ -159,28 +187,94 @@ export default function MatchingPage() {
   };
 
   // Rejeter un match (action croix du Tinder)
-  const rejectMatch = async (candidatId, posteId) => {
+  const rejectMatch = async (candidat, poste) => {
+    const nomCandidat = `${candidat.prenom} ${candidat.nom}`;
+    const confirmation = window.confirm(
+      `Rejeter le match entre ${nomCandidat} et « ${poste.titre_poste} » chez ${poste.entreprise} ?\n\n`
+      + `Il n'apparaîtra plus dans les matchs. Vous pourrez le restaurer via « Matchs rejetés ».`
+    );
+    if (!confirmation) return;
+
     try {
       await axios.post(
         `${API_URL}/api/rejected-matches`,
-        { candidat_id: candidatId, poste_id: posteId },
+        { candidat_id: candidat.id, poste_id: poste.id },
         { headers: getAuthHeaders() }
       );
       toast.success('Match rejeté');
-      
-      // Mettre à jour l'état local
-      setRejectedMatches([...rejectedMatches, { candidat_id: candidatId, poste_id: posteId }]);
-      
+
+      // On conserve les libellés pour pouvoir présenter la liste des rejets
+      // sans avoir à recharger candidats et postes.
+      setRejectedMatches(prev => [
+        ...prev.filter(r => !(r.candidat_id === candidat.id && r.poste_id === poste.id)),
+        { candidat_id: candidat.id, poste_id: poste.id, candidat, poste }
+      ]);
+
       // Retirer le match de la liste affichée
-      if (activeTab === 'postes') {
-        setMatchesForPoste(matchesForPoste.filter(m => m.candidat.id !== candidatId));
-      } else {
-        setMatchesForCandidat(matchesForCandidat.filter(m => m.poste.id !== posteId));
-      }
+      setMatchesForPoste(prev => prev.filter(
+        m => !(m.candidat.id === candidat.id && poste.id === selectedPoste?.id)
+      ));
+      setMatchesForCandidat(prev => prev.filter(
+        m => !(m.poste.id === poste.id && candidat.id === selectedCandidat?.id)
+      ));
     } catch (error) {
       console.error('Error rejecting match:', error);
-      toast.error('Erreur lors du rejet');
+      if (error.response?.status !== 401) {
+        toast.error('Erreur lors du rejet');
+      }
     }
+  };
+
+  // Restaurer un match rejeté par erreur
+  const restoreMatch = async (candidatId, posteId) => {
+    try {
+      await axios.delete(
+        `${API_URL}/api/rejected-matches/${candidatId}/${posteId}`,
+        { headers: getAuthHeaders() }
+      );
+      toast.success('Match restauré');
+      setRejectedMatches(prev => prev.filter(
+        r => !(r.candidat_id === candidatId && r.poste_id === posteId)
+      ));
+      refreshMatches();
+    } catch (error) {
+      console.error('Error restoring match:', error);
+      if (error.response?.status !== 401) {
+        toast.error('Erreur lors de la restauration');
+      }
+    }
+  };
+
+  // Recharge la liste de matchs de l'onglet actif (après une restauration)
+  const refreshMatches = async () => {
+    try {
+      if (activeTab === 'postes' && selectedPoste) {
+        const response = await axios.get(
+          `${API_URL}/api/matching/${selectedPoste.id}`,
+          { headers: getAuthHeaders() }
+        );
+        setMatchesForPoste(response.data.filter(m => m.score === 100));
+      } else if (activeTab === 'candidats' && selectedCandidat) {
+        const response = await axios.get(
+          `${API_URL}/api/matching/candidat/${selectedCandidat.id}`,
+          { headers: getAuthHeaders() }
+        );
+        setMatchesForCandidat(response.data.filter(m => m.score === 100));
+      }
+    } catch (error) {
+      console.error('Error refreshing matches:', error);
+    }
+  };
+
+  // Libellé d'un rejet : les objets complets ne sont présents que pour les
+  // rejets faits pendant la session, sinon on retrouve depuis les listes chargées.
+  const describeRejected = (rejet) => {
+    const candidat = rejet.candidat || allCandidats.find(c => c.id === rejet.candidat_id);
+    const poste = rejet.poste || postes.find(p => p.id === rejet.poste_id);
+    return {
+      candidat: candidat ? `${candidat.prenom} ${candidat.nom}` : 'Candidat supprimé',
+      poste: poste ? `${poste.titre_poste} — ${poste.entreprise}` : 'Poste supprimé'
+    };
   };
 
   // Accepter un match = créer un process directement avec statut ENCV
@@ -258,6 +352,60 @@ export default function MatchingPage() {
           Matchs parfaits (100%) entre candidats et postes
         </p>
       </div>
+
+      {/* Matchs rejetés : sans ce panneau, un rejet accidentel était définitif */}
+      {rejectedMatches.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-heading flex items-center gap-2">
+                <Archive className="h-4 w-4" />
+                Matchs rejetés ({rejectedMatches.length})
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowRejected(!showRejected)}
+                data-testid="toggle-rejected-btn"
+              >
+                {showRejected ? 'Masquer' : 'Afficher'}
+              </Button>
+            </div>
+          </CardHeader>
+          {showRejected && (
+            <CardContent className="pt-0">
+              <ScrollArea className="max-h-64">
+                <div className="space-y-2">
+                  {rejectedMatches.map((rejet) => {
+                    const libelle = describeRejected(rejet);
+                    return (
+                      <div
+                        key={`${rejet.candidat_id}-${rejet.poste_id}`}
+                        className="flex items-center justify-between gap-4 p-3 rounded-lg border bg-muted/30"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{libelle.candidat}</p>
+                          <p className="text-xs text-muted-foreground truncate">{libelle.poste}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => restoreMatch(rejet.candidat_id, rejet.poste_id)}
+                          data-testid={`restore-match-${rejet.candidat_id}-${rejet.poste_id}`}
+                        >
+                          <Undo2 className="h-4 w-4 mr-2" />
+                          Restaurer
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
@@ -433,7 +581,7 @@ export default function MatchingPage() {
                                         size="icon" 
                                         variant="outline"
                                         className="h-10 w-10 rounded-full border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                        onClick={() => rejectMatch(match.candidat.id, selectedPoste.id)}
+                                        onClick={() => rejectMatch(match.candidat, selectedPoste)}
                                         data-testid={`reject-match-${match.candidat.id}`}
                                         title="Rejeter ce match"
                                       >
@@ -621,7 +769,7 @@ export default function MatchingPage() {
                                         size="icon" 
                                         variant="outline"
                                         className="h-10 w-10 rounded-full border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                        onClick={() => rejectMatch(selectedCandidat.id, match.poste.id)}
+                                        onClick={() => rejectMatch(selectedCandidat, match.poste)}
                                         data-testid={`reject-match-poste-${match.poste.id}`}
                                         title="Rejeter ce match"
                                       >

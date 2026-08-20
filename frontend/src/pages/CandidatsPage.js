@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent } from '../components/ui/card';
@@ -28,8 +28,9 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, ArrowRight, Download, Upload, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, MapPin, User, Download, Upload, Archive, ArchiveRestore } from 'lucide-react';
 import { toast } from 'sonner';
+import TablePagination from '../components/TablePagination';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -41,6 +42,10 @@ const SOURCES = [
   "Site 111 conseils",
   "Cooptation"
 ];
+
+// Le backend ne plafonne plus les listes : on pagine côté affichage pour
+// éviter de rendre plusieurs milliers de lignes d'un seul coup.
+const PAGE_SIZE = 50;
 
 const initialFormState = {
   nom: '',
@@ -55,7 +60,7 @@ const initialFormState = {
 };
 
 export default function CandidatsPage() {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, handleUnauthorized } = useAuth();
   const [candidats, setCandidats] = useState([]);
   const [processMap, setProcessMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -67,8 +72,9 @@ export default function CandidatsPage() {
   const [currentCandidat, setCurrentCandidat] = useState(null);
   const [formData, setFormData] = useState(initialFormState);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [candidatsRes, processRes] = await Promise.all([
         axios.get(`${API_URL}/api/candidats`, { headers: getAuthHeaders() }),
@@ -87,15 +93,23 @@ export default function CandidatsPage() {
       setProcessMap(pMap);
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast.error('Erreur lors du chargement des données');
+      if (error.response?.status !== 401) {
+        toast.error('Erreur lors du chargement des données');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // Revenir en page 1 dès que le filtrage change, sinon on peut se retrouver
+  // sur une page vide après avoir réduit le nombre de résultats.
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, filterSource, filterArchived]);
 
   const openCreateModal = () => {
     setFormData(initialFormState);
@@ -199,6 +213,10 @@ export default function CandidatsPage() {
         headers: getAuthHeaders()
       });
       
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       if (!response.ok) throw new Error('Export failed');
       
       const blob = await response.blob();
@@ -227,20 +245,30 @@ export default function CandidatsPage() {
     try {
       const response = await fetch(`${API_URL}/api/import/candidats`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: getAuthHeaders(),
         body: formData
       });
 
       const result = await response.json();
       
       if (response.ok) {
-        toast.success(`${result.imported} candidat(s) importé(s) !`);
+        // Le backend déduplique : un candidat déjà connu est mis à jour, pas recréé.
+        // N'annoncer que "imported" afficherait "0 importé" sur un réimport.
+        const ajoutes = result.imported || 0;
+        const majs = result.updated || 0;
+        if (ajoutes && majs) {
+          toast.success(`${ajoutes} candidat(s) ajouté(s), ${majs} mis à jour`);
+        } else if (majs) {
+          toast.success(`${majs} candidat(s) déjà connu(s) mis à jour`);
+        } else {
+          toast.success(`${ajoutes} candidat(s) ajouté(s) !`);
+        }
         if (result.errors?.length > 0) {
-          toast.warning(`${result.errors.length} erreur(s) lors de l'import`);
+          toast.warning(`${result.errors.length} ligne(s) en erreur : ${result.errors[0]}`);
         }
         fetchData();
+      } else if (response.status === 401) {
+        handleUnauthorized();
       } else {
         toast.error(result.detail || 'Erreur lors de l\'import');
       }
@@ -268,6 +296,13 @@ export default function CandidatsPage() {
       (filterArchived === 'archived' && c.is_archived);
     return matchesSearch && matchesSource && matchesArchived;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredCandidats.length / PAGE_SIZE));
+  const pageCourante = Math.min(page, totalPages);
+  const candidatsAffiches = filteredCandidats.slice(
+    (pageCourante - 1) * PAGE_SIZE,
+    pageCourante * PAGE_SIZE
+  );
 
   const activeCount = candidats.filter(c => !c.is_archived).length;
   const archivedCount = candidats.filter(c => c.is_archived).length;
@@ -404,7 +439,7 @@ export default function CandidatsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCandidats.map((candidat) => {
+                  {candidatsAffiches.map((candidat) => {
                     const activeProcesses = getActiveProcesses(candidat.id);
                     const totalProcesses = getProcessCount(candidat.id);
                     
@@ -505,6 +540,14 @@ export default function CandidatsPage() {
                   })}
                 </TableBody>
               </Table>
+              <TablePagination
+                page={pageCourante}
+                pageSize={PAGE_SIZE}
+                totalItems={filteredCandidats.length}
+                onPageChange={setPage}
+                label="candidat"
+                testId="candidats-pagination"
+              />
             </div>
           )}
         </CardContent>

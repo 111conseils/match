@@ -22,30 +22,42 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchData = async () => {
       try {
         const [statsRes, matchesRes] = await Promise.all([
-          axios.get(`${API_URL}/api/stats`, { headers: getAuthHeaders() }),
-          axios.get(`${API_URL}/api/matching`, { headers: getAuthHeaders() })
+          axios.get(`${API_URL}/api/stats`, {
+            headers: getAuthHeaders(), signal: controller.signal
+          }),
+          axios.get(`${API_URL}/api/matching`, {
+            headers: getAuthHeaders(), signal: controller.signal
+          })
         ]);
-        
+
         setStats(statsRes.data);
-        
-        // Get top matches from all positions
+
+        // Seuls les matchs complets sont retenus, comme sur la page Matching :
+        // afficher ici un match a 50% qui disparait ensuite est deroutant.
         const allMatches = matchesRes.data
           .flatMap(p => p.matches.map(m => ({ ...m, poste: p.poste })))
+          .filter(m => m.score === 100)
           .sort((a, b) => b.score - a.score)
           .slice(0, 5);
         setRecentMatches(allMatches);
       } catch (error) {
+        if (axios.isCancel(error) || error.name === 'CanceledError') return;
         console.error('Error fetching dashboard data:', error);
-        toast.error('Erreur lors du chargement des données');
+        if (error.response?.status !== 401) {
+          toast.error('Erreur lors du chargement des données');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
+    return () => controller.abort();
   }, [getAuthHeaders]);
 
   const statCards = [
@@ -66,6 +78,14 @@ export default function DashboardPage() {
       link: '/postes'
     },
     {
+      title: 'Matchs',
+      value: stats.total_matches || 0,
+      icon: Zap,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+      link: '/matching'
+    },
+    {
       title: 'Placés',
       value: stats.candidats_places || 0,
       icon: TrendingUp,
@@ -83,9 +103,10 @@ export default function DashboardPage() {
     }
   ];
 
+  // Le score ne peut valoir que 0, 50 ou 100 (titre 50 pts + zone 50 pts).
   const getScoreClass = (score) => {
-    if (score >= 70) return 'high';
-    if (score >= 40) return 'medium';
+    if (score >= 100) return 'high';
+    if (score > 0) return 'medium';
     return 'low';
   };
 
@@ -129,7 +150,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {statCards.map((stat) => (
           <Card 
             key={stat.title} 

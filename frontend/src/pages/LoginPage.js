@@ -8,8 +8,7 @@ import { toast } from 'sonner';
 import { Users, Briefcase, Zap } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, register } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,13 +18,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (isLogin) {
-        await login(email, password);
-        toast.success('Connexion réussie !');
-      } else {
-        await register(email, password);
-        toast.success('Compte créé avec succès !');
-      }
+      await login(email, password);
+      toast.success('Connexion réussie !');
     } catch (error) {
       const message = error.response?.data?.detail || 'Une erreur est survenue';
       toast.error(message);
@@ -88,12 +82,10 @@ export default function LoginPage() {
               <h1 className="text-2xl font-bold font-heading text-primary">111MATCHING</h1>
             </div>
             <CardTitle className="text-2xl font-heading">
-              {isLogin ? 'Connexion' : 'Créer un compte'}
+              Connexion
             </CardTitle>
             <CardDescription>
-              {isLogin 
-                ? 'Entrez vos identifiants pour accéder à votre espace' 
-                : 'Remplissez le formulaire pour créer votre compte'}
+              Entrez vos identifiants pour accéder à votre espace
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -136,7 +128,7 @@ export default function LoginPage() {
                     Chargement...
                   </span>
                 ) : (
-                  isLogin ? 'Se connecter' : 'Créer le compte'
+                  'Se connecter'
                 )}
               </Button>
             </form>

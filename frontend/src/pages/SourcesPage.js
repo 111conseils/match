@@ -33,7 +33,9 @@ export default function SourcesPage() {
         setSourcesData(response.data);
       } catch (error) {
         console.error('Error fetching sources stats:', error);
-        toast.error('Erreur lors du chargement des statistiques');
+        if (error.response?.status !== 401) {
+          toast.error('Erreur lors du chargement des statistiques');
+        }
       } finally {
         setLoading(false);
       }
